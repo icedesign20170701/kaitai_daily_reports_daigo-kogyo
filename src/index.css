@@ -1,0 +1,33 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply min-h-screen bg-background font-sans text-foreground antialiased;
+    font-family: "Noto Sans JP", sans-serif;
+    background-image:
+      radial-gradient(circle at top left, rgba(217, 119, 6, 0.08), transparent 28%),
+      linear-gradient(180deg, rgba(255, 251, 235, 0.9), rgba(250, 247, 240, 1));
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer utilities {
+  .touch-target {
+    @apply min-h-11 min-w-11;
+  }
+}

@@ -367,36 +367,4 @@ comment on table public.workers is '固定マスタ種別として追加。将�
 comment on table public.machines is '固定マスタ種別として追加。将来機種、号機、保有区分などを付与しやすい形。';
 comment on table public.vehicles is '固定マスタ種別として追加。将来ナンバー、車種、積載量などを付与しやすい形。';
 comment on table public.partner_companies is '固定マスタ種別として追加。将来担当者情報や請負区分を付与しやすい形。';
-
-insert into storage.buckets (id, name, public)
-values ('report-photos', 'report-photos', true)
-on conflict (id) do nothing;
-
-drop policy if exists "authenticated users can upload report photos" on storage.objects;
-create policy "authenticated users can upload report photos"
-on storage.objects
-for insert
-to authenticated
-with check (bucket_id = 'report-photos');
-
-drop policy if exists "authenticated users can read report photos" on storage.objects;
-create policy "authenticated users can read report photos"
-on storage.objects
-for select
-to authenticated
-using (bucket_id = 'report-photos');
-
-drop policy if exists "authenticated users can update report photos" on storage.objects;
-create policy "authenticated users can update report photos"
-on storage.objects
-for update
-to authenticated
-using (bucket_id = 'report-photos')
-with check (bucket_id = 'report-photos');
-
-drop policy if exists "authenticated users can delete report photos" on storage.objects;
-create policy "authenticated users can delete report photos"
-on storage.objects
-for delete
-to authenticated
-using (bucket_id = 'report-photos');
+comment on column public.report_photos.image_path is '外部ストレージまたは自社サーバーに保存した画像URLを格納する。';

@@ -45,3 +45,17 @@ export async function upsertMasterItem(
 
   return data as MasterItem;
 }
+
+export async function reorderMasterItems(type: MasterItemType, items: MasterItem[]) {
+  const updates = items.map((item, index) => ({
+    id: item.id,
+    name: item.name,
+    sort_order: index,
+    is_active: item.is_active,
+  }));
+
+  const { error } = await supabase.from(tableMap[type]).upsert(updates, { onConflict: "id" });
+  if (error) {
+    throw error;
+  }
+}

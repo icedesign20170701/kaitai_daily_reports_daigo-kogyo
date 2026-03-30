@@ -1,28 +1,27 @@
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { Link } from "react-router-dom";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
+import { CalendarDays, ImagePlus, LoaderCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { storageService } from "@/lib/storage-service";
-import { toDateInputValue } from "@/lib/utils";
+import { cn, toDateInputValue } from "@/lib/utils";
 import type { DailyReportDetail, MasterItem, ReportFormValues, ReportPhoto, Site } from "@/types/database";
 
 const reportSchema = z.object({
   report_date: z.string().min(1, "日付を入力してください"),
   site_id: z.string().min(1, "現場を選択してください"),
-  worker_count: z.coerce.number().int().min(1, "作業人数は1人以上です"),
   work_item_ids: z.array(z.string()),
   waste_item_ids: z.array(z.string()),
   safety_item_ids: z.array(z.string()),
-  worker_ids: z.array(z.string()),
+  worker_ids: z.array(z.string()).min(1, "作業員を1人以上選択してください"),
   machine_ids: z.array(z.string()),
   vehicle_ids: z.array(z.string()),
   partner_company_ids: z.array(z.string()),
@@ -93,6 +92,29 @@ function PhotoPreview({
   );
 }
 
+function DateField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="relative block overflow-hidden rounded-xl border bg-card px-3 py-3 shadow-sm">
+      <input
+        type="date"
+        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium">{value}</span>
+        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </div>
+    </label>
+  );
+}
+
 export function ReportForm({
   sites,
   workItems,
@@ -126,7 +148,6 @@ export function ReportForm({
     defaultValues: {
       report_date: initialReport?.report_date ?? toDateInputValue(),
       site_id: initialReport?.site_id ?? "",
-      worker_count: initialReport?.worker_count ?? 1,
       work_item_ids: initialReport?.work_items.map((item) => item.id) ?? [],
       waste_item_ids: initialReport?.waste_items.map((item) => item.id) ?? [],
       safety_item_ids: initialReport?.safety_items.map((item) => item.id) ?? [],
@@ -138,6 +159,8 @@ export function ReportForm({
       note: initialReport?.note ?? "",
     },
   });
+
+  const selectedWorkerCount = form.watch("worker_ids").length;
 
   const previewPhotos = useMemo(
     () =>
@@ -186,7 +209,13 @@ export function ReportForm({
 
   const submit = form.handleSubmit(async (values) => {
     try {
-      await onSubmit(values, pendingFiles);
+      await onSubmit(
+        {
+          ...values,
+          worker_count: values.worker_ids.length,
+        },
+        pendingFiles,
+      );
       setPendingFiles([]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存に失敗しました");
@@ -204,7 +233,10 @@ export function ReportForm({
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="report_date">日付</Label>
-              <Input id="report_date" type="date" {...form.register("report_date")} />
+              <DateField
+                value={form.watch("report_date")}
+                onChange={(value) => form.setValue("report_date", value, { shouldDirty: true })}
+              />
               {form.formState.errors.report_date ? (
                 <p className="text-sm text-destructive">{form.formState.errors.report_date.message}</p>
               ) : null}
@@ -227,14 +259,6 @@ export function ReportForm({
                 <p className="text-sm text-destructive">{form.formState.errors.site_id.message}</p>
               ) : null}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="worker_count">作業人数</Label>
-            <Input id="worker_count" type="number" min={1} inputMode="numeric" {...form.register("worker_count")} />
-            {form.formState.errors.worker_count ? (
-              <p className="text-sm text-destructive">{form.formState.errors.worker_count.message}</p>
-            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -270,6 +294,21 @@ export function ReportForm({
         values={form.watch("worker_ids")}
         onToggle={(itemId, checked) => updateMultiSelect("worker_ids", itemId, checked)}
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">作業人数</CardTitle>
+          <CardDescription>選択した作業員数から自動計算します。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 pt-0">
+          <p className="rounded-xl bg-secondary px-4 py-3 text-sm font-medium text-secondary-foreground">
+            現在の作業人数: {selectedWorkerCount}人
+          </p>
+          {form.formState.errors.worker_ids ? (
+            <p className="text-sm text-destructive">{form.formState.errors.worker_ids.message}</p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <ChecklistSection
         title="重機"
@@ -361,6 +400,13 @@ export function ReportForm({
           "保存する"
         )}
       </Button>
+
+      <Link
+        to="/reports"
+        className={cn(buttonVariants({ variant: "outline", size: "lg" }), "w-full md:hidden")}
+      >
+        一覧に戻る
+      </Link>
     </form>
   );
 }

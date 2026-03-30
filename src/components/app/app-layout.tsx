@@ -13,6 +13,7 @@ const navItems = [
 
 export function AppLayout() {
   const location = useLocation();
+  const isReportEditingScreen = location.pathname.startsWith("/reports/new") || /^\/reports\/[^/]+$/.test(location.pathname);
   const heading = location.pathname.startsWith("/reports/new")
     ? "日報入力"
     : location.pathname.startsWith("/sites")
@@ -31,13 +32,13 @@ export function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[240px_1fr]">
-      <aside className="hidden border-r bg-card/70 md:block">
+    <div className="industrial-grid min-h-screen md:grid md:grid-cols-[260px_1fr]">
+      <aside className="hidden border-r border-slate-800/70 bg-slate-950 text-slate-100 md:block">
         <div className="sticky top-0 flex h-screen flex-col p-4">
-          <div className="mb-8 rounded-2xl bg-primary px-4 py-5 text-primary-foreground shadow-soft">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground/80">Kaitai</p>
-            <p className="mt-1 text-xl font-extrabold">日報アプリ</p>
-            <p className="mt-2 text-sm text-primary-foreground/80">現場の入力を最優先にした最小構成</p>
+          <div className="mb-8 overflow-hidden rounded-3xl border border-sky-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 px-4 py-5 shadow-soft">
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-sky-300/80">Demolition Ops</p>
+            <p className="mt-2 text-2xl font-extrabold tracking-tight text-white">解体現場日報</p>
+            <p className="mt-2 text-sm text-slate-300">スマホ入力を起点にした現場記録</p>
           </div>
           <nav className="space-y-2">
             {navItems.map((item) => (
@@ -46,8 +47,8 @@ export function AppLayout() {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-muted-foreground transition hover:bg-accent hover:text-foreground",
-                    isActive && "bg-accent text-foreground",
+                    "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-slate-400 transition hover:bg-white/8 hover:text-white",
+                    isActive && "bg-gradient-to-r from-sky-500/20 to-amber-400/10 text-white ring-1 ring-sky-400/30",
                   )
                 }
               >
@@ -56,7 +57,7 @@ export function AppLayout() {
               </NavLink>
             ))}
           </nav>
-          <Button variant="outline" className="mt-auto justify-start" onClick={handleSignOut}>
+          <Button variant="outline" className="mt-auto justify-start border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={handleSignOut}>
             <LogOut className="h-4 w-4" />
             ログアウト
           </Button>
@@ -64,42 +65,46 @@ export function AppLayout() {
       </aside>
 
       <div className="flex min-h-screen flex-col">
-        <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 md:px-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Daily Reports</p>
-              <h1 className="text-lg font-bold">{heading}</h1>
+        {!isReportEditingScreen ? (
+          <header className="border-b border-white/50 bg-background/85 backdrop-blur-xl md:sticky md:top-0 md:z-20">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Daily Reports</p>
+                <h1 className="text-lg font-extrabold tracking-tight">{heading}</h1>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4" />
+                ログアウト
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4" />
-              ログアウト
-            </Button>
-          </div>
-        </header>
+          </header>
+        ) : null}
 
         <main className="flex-1">
           <Outlet />
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-card/95 p-2 backdrop-blur md:hidden">
-          <div className="grid grid-cols-3 gap-2">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    "flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs font-semibold text-muted-foreground",
-                    isActive && "bg-accent text-foreground",
-                  )
-                }
-              >
-                <item.icon className="h-5 w-5" />
-                {item.label}
-              </NavLink>
-            ))}
-          </div>
-        </nav>
+        {!isReportEditingScreen ? (
+          <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/50 bg-background/90 p-2 backdrop-blur-xl md:hidden">
+            <div className="grid grid-cols-3 gap-2">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold text-muted-foreground transition",
+                      isActive && "bg-gradient-to-b from-sky-500/15 to-sky-400/5 text-foreground ring-1 ring-sky-500/20",
+                    )
+                  }
+                >
+                  <item.icon className="h-5 w-5" />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        ) : null}
       </div>
     </div>
   );

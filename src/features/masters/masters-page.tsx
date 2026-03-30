@@ -1,6 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical, Plus } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listMasterItems, upsertMasterItem } from "@/features/masters/master-service";
+import { listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
 import { cn } from "@/lib/utils";
 import type { MasterItem, MasterItemType } from "@/types/database";
 
@@ -62,6 +80,11 @@ export function MastersPage() {
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MasterItem | null>(null);
   const [items, setItems] = useState<MasterItem[]>([]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const form = useForm<MasterFormValues>({
     resolver: zodResolver(masterSchema),
@@ -124,6 +147,83 @@ export function MastersPage() {
       toast.error(error instanceof Error ? error.message : "保存に失敗しました");
     }
   });
+
+  const persistOrder = async (nextItems: MasterItem[]) => {
+    if (!masterType) {
+      return;
+    }
+    const normalizedItems = nextItems.map((item, index) => ({ ...item, sort_order: index }));
+    setItems(normalizedItems);
+    try {
+      await reorderMasterItems(masterType, normalizedItems);
+      toast.success("表示順を更新しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "表示順の更新に失敗しました");
+      await load();
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const currentIndex = items.findIndex((item) => item.id === active.id);
+    const targetIndex = items.findIndex((item) => item.id === over.id);
+    if (currentIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    await persistOrder(arrayMove(items, currentIndex, targetIndex));
+  };
+
+  function SortableMasterCard({ item }: { item: MasterItem }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+      id: item.id,
+    });
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition,
+        }}
+        className={cn(isDragging && "opacity-60")}
+      >
+        <Card className={cn(isDragging && "shadow-lg")}>
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={cn(
+                    "touch-target inline-flex items-center justify-center cursor-grab rounded-lg border border-transparent p-1 text-muted-foreground transition",
+                    "hover:scale-105 hover:border-border hover:bg-accent hover:text-foreground",
+                    "active:cursor-grabbing active:scale-95 active:bg-primary/10",
+                    isDragging && "cursor-grabbing border-border bg-accent text-foreground",
+                  )}
+                  aria-label={`${item.name}を並び替え`}
+                  title="ドラッグして並び替え"
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="h-4 w-4" />
+                </button>
+                <p className="font-bold">{item.name}</p>
+                <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">名前横のアイコンを長押しまたはドラッグして表示順を変更できます</p>
+            </div>
+            <Button variant="outline" onClick={() => openEdit(item)}>
+              編集
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!masterType || !meta) {
     return (
@@ -228,24 +328,15 @@ export function MastersPage() {
       ) : items.length === 0 ? (
         <EmptyState title="項目がありません" description="最初の項目を追加してください。" />
       ) : (
-        <div className="grid gap-3">
-          {items.map((item) => (
-            <Card key={item.id}>
-              <CardContent className="flex items-center justify-between gap-3 p-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold">{item.name}</p>
-                    <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">表示順: {item.sort_order}</p>
-                </div>
-                <Button variant="outline" onClick={() => openEdit(item)}>
-                  編集
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)}>
+          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+            <div className="grid gap-3">
+              {items.map((item) => (
+                <SortableMasterCard key={item.id} item={item} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </PageShell>
   );

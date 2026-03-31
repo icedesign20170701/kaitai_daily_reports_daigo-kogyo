@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -54,6 +54,7 @@ function DateFilterField({
 }
 
 export function ReportsPage() {
+  const monthDesktopInputRef = useRef<HTMLInputElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -135,6 +136,21 @@ export function ReportsPage() {
     }
   };
 
+  const openDesktopMonthPicker = () => {
+    const input = monthDesktopInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -156,7 +172,7 @@ export function ReportsPage() {
 
       <Card className="mb-4">
         <CardContent className="space-y-4 pt-5">
-          <div className="grid gap-4 md:grid-cols-[auto_1fr_auto_auto]">
+          <div className="grid gap-4 md:hidden">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => subMonths(current, 1))}>
                 <ChevronLeft className="h-4 w-4" />
@@ -188,11 +204,63 @@ export function ReportsPage() {
               </div>
               <p className="mt-1 text-xs text-muted-foreground">タップしてカレンダーから月を選択</p>
             </label>
-            <div className="rounded-2xl bg-secondary px-4 py-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">件数</p>
+                <p className="mt-1 text-2xl font-extrabold">{summary.count}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">延べ人数</p>
+                <p className="mt-1 text-2xl font-extrabold">{summary.workers}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden gap-4 md:grid md:grid-cols-[auto_minmax(220px,0.8fr)_minmax(120px,auto)_minmax(120px,auto)]">
+            <div className="flex items-center md:justify-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => subMonths(current, 1))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => addMonths(current, 1))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <label
+              className="relative block cursor-pointer rounded-2xl bg-secondary px-4 py-3 transition hover:bg-accent"
+              onClick={(event) => {
+                event.preventDefault();
+                openDesktopMonthPicker();
+              }}
+            >
+              <input
+                ref={monthDesktopInputRef}
+                type="date"
+                className="absolute h-0 w-0 opacity-0"
+                value={monthInputValue}
+                onChange={(event) => {
+                  if (!event.target.value) {
+                    return;
+                  }
+                  setCurrentMonth(startOfMonth(new Date(`${event.target.value}T00:00:00`)));
+                }}
+                tabIndex={-1}
+              />
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground">表示月</p>
+                  <p className="mt-1 text-lg font-extrabold">{format(currentMonth, "yyyy年M月", { locale: ja })}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
+                  <CalendarDays className="h-4 w-4" />
+                </div>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">クリックして月変更</p>
+            </label>
+            <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
               <p className="text-xs font-semibold text-muted-foreground">件数</p>
               <p className="mt-1 text-2xl font-extrabold">{summary.count}</p>
             </div>
-            <div className="rounded-2xl bg-secondary px-4 py-3">
+            <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
               <p className="text-xs font-semibold text-muted-foreground">延べ人数</p>
               <p className="mt-1 text-2xl font-extrabold">{summary.workers}</p>
             </div>

@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical, Plus } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -46,7 +46,6 @@ import type { MasterItem, MasterItemType } from "@/types/database";
 
 const masterSchema = z.object({
   name: z.string().min(1, "項目名を入力してください"),
-  sort_order: z.coerce.number().int().min(0),
   is_active: z.boolean(),
 });
 
@@ -60,6 +59,16 @@ const pageLabels: Record<MasterItemType, { title: string; description: string }>
   machine: { title: "重機マスタ", description: "現場で利用する重機の一覧です。" },
   vehicle: { title: "車両マスタ", description: "利用する車両の一覧です。" },
   partner: { title: "協力会社マスタ", description: "協力会社の一覧です。" },
+};
+
+const itemLabels: Record<MasterItemType, string> = {
+  work: "作業項目",
+  waste: "廃材項目",
+  safety: "安全確認項目",
+  worker: "作業員",
+  machine: "重機",
+  vehicle: "車両",
+  partner: "協力会社",
 };
 
 const routeTypeMap: Record<string, MasterItemType> = {
@@ -82,7 +91,7 @@ export function MastersPage() {
   const [items, setItems] = useState<MasterItem[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 14 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -90,12 +99,12 @@ export function MastersPage() {
     resolver: zodResolver(masterSchema),
     defaultValues: {
       name: "",
-      sort_order: 0,
       is_active: true,
     },
   });
 
   const meta = useMemo(() => (masterType ? pageLabels[masterType] : null), [masterType]);
+  const itemLabel = masterType ? itemLabels[masterType] : "";
 
   const load = useCallback(async () => {
     if (!masterType) {
@@ -119,13 +128,13 @@ export function MastersPage() {
 
   const openCreate = () => {
     setEditingItem(null);
-    form.reset({ name: "", sort_order: 0, is_active: true });
+    form.reset({ name: "", is_active: true });
     setOpen(true);
   };
 
   const openEdit = (item: MasterItem) => {
     setEditingItem(item);
-    form.reset({ name: item.name, sort_order: item.sort_order, is_active: item.is_active });
+    form.reset({ name: item.name, is_active: item.is_active });
     setOpen(true);
   };
 
@@ -137,7 +146,7 @@ export function MastersPage() {
       await upsertMasterItem(masterType, {
         id: editingItem?.id,
         name: values.name,
-        sort_order: values.sort_order,
+        sort_order: editingItem?.sort_order ?? items.length,
         is_active: values.is_active,
       });
       toast.success(editingItem ? "項目を更新しました" : "項目を追加しました");
@@ -178,10 +187,21 @@ export function MastersPage() {
     await persistOrder(arrayMove(items, currentIndex, targetIndex));
   };
 
+  const moveByArrow = async (itemId: string, direction: -1 | 1) => {
+    const currentIndex = items.findIndex((item) => item.id === itemId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) {
+      return;
+    }
+
+    await persistOrder(arrayMove(items, currentIndex, targetIndex));
+  };
+
   function SortableMasterCard({ item }: { item: MasterItem }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
       id: item.id,
     });
+    const index = items.findIndex((currentItem) => currentItem.id === item.id);
 
     return (
       <div
@@ -193,13 +213,14 @@ export function MastersPage() {
         className={cn(isDragging && "opacity-60")}
       >
         <Card className={cn(isDragging && "shadow-lg")}>
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   className={cn(
-                    "touch-target inline-flex items-center justify-center cursor-grab rounded-lg border border-transparent p-1 text-muted-foreground transition",
+                    "touch-target hidden items-center justify-center cursor-grab rounded-lg border border-transparent p-1 text-muted-foreground transition md:inline-flex",
                     "hover:scale-105 hover:border-border hover:bg-accent hover:text-foreground",
                     "active:cursor-grabbing active:scale-95 active:bg-primary/10",
                     isDragging && "cursor-grabbing border-border bg-accent text-foreground",
@@ -211,14 +232,44 @@ export function MastersPage() {
                 >
                   <GripVertical className="h-4 w-4" />
                 </button>
-                <p className="font-bold">{item.name}</p>
-                <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
+                  <p className="break-all text-base font-bold sm:text-lg">{item.name}</p>
+                  <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
+                </div>
+                <p className="hidden text-sm text-muted-foreground md:block">
+                  名前横のアイコンを長押しまたはドラッグして表示順を変更できます
+                </p>
+                <p className="text-sm leading-6 text-muted-foreground md:hidden">上下ボタンで表示順を変更できます</p>
               </div>
-              <p className="text-sm text-muted-foreground">名前横のアイコンを長押しまたはドラッグして表示順を変更できます</p>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="grid grid-cols-3 gap-2 md:hidden">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="w-full"
+                    onClick={() => void moveByArrow(item.id, -1)}
+                    disabled={index <= 0}
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="w-full"
+                    onClick={() => void moveByArrow(item.id, 1)}
+                    disabled={index === -1 || index >= items.length - 1}
+                  >
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" className="w-full" onClick={() => openEdit(item)}>
+                    編集
+                  </Button>
+                </div>
+                <Button variant="outline" className="hidden w-full sm:w-auto md:inline-flex" onClick={() => openEdit(item)}>
+                  編集
+                </Button>
+              </div>
             </div>
-            <Button variant="outline" onClick={() => openEdit(item)}>
-              編集
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -248,17 +299,15 @@ export function MastersPage() {
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>{editingItem ? "項目編集" : "項目追加"}</DialogTitle>
-                <DialogDescription>並び順の小さいものが先に表示されます。</DialogDescription>
+                <DialogTitle>{editingItem ? `${itemLabel}の編集` : `${itemLabel}の追加`}</DialogTitle>
+                <DialogDescription>
+                  {editingItem ? `${itemLabel}の登録内容を更新します。` : `新しい${itemLabel}を登録します。`}
+                </DialogDescription>
               </DialogHeader>
               <form className="space-y-4" onSubmit={handleSubmit}>
                 <div className="space-y-2">
                   <Label htmlFor="master-name">項目名</Label>
                   <Input id="master-name" {...form.register("name")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="master-sort">表示順</Label>
-                  <Input id="master-sort" type="number" min={0} {...form.register("sort_order")} />
                 </div>
                 <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
                   <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />

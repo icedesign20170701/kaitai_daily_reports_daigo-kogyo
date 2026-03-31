@@ -44,28 +44,26 @@ function ChecklistSection({
   values: string[];
   onToggle: (itemId: string, checked: boolean) => void;
 }) {
+  if (items.length === 0) {
+    return null;
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground">有効な項目がありません。管理画面で追加してください。</p>
-        ) : (
-          items.map((item) => (
-            <label
-              key={item.id}
-              className="flex cursor-pointer items-start gap-3 rounded-xl border bg-background px-3 py-3"
-            >
-              <Checkbox checked={values.includes(item.id)} onCheckedChange={(checked) => onToggle(item.id, checked === true)} />
-              <div>
-                <p className="font-medium">{item.name}</p>
-              </div>
-            </label>
-          ))
-        )}
+      <CardContent className="flex flex-wrap gap-2.5">
+        {items.map((item) => (
+          <label
+            key={item.id}
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border bg-background px-3 py-2.5 text-sm font-medium transition hover:bg-accent/50"
+          >
+            <Checkbox checked={values.includes(item.id)} onCheckedChange={(checked) => onToggle(item.id, checked === true)} />
+            <span className="leading-5">{item.name}</span>
+          </label>
+        ))}
       </CardContent>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { ClipboardList, LogOut, MapPinned, Settings2 } from "lucide-react";
+import { ClipboardList, LogOut, MapPinned, Settings2, UserCircle2 } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,8 @@ import { signOut } from "@/features/auth/auth-service";
 const navItems = [
   { to: "/reports", label: "日報", icon: ClipboardList },
   { to: "/sites", label: "現場", icon: MapPinned },
-  { to: "/masters/work-items", label: "マスタ", icon: Settings2 },
+  { to: "/masters/workers", label: "マスタ", icon: Settings2 },
+  { to: "/settings/profile", label: "設定", icon: UserCircle2 },
 ];
 
 export function AppLayout() {
@@ -86,7 +87,7 @@ export function AppLayout() {
 
         {!isReportEditingScreen ? (
           <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/50 bg-background/90 p-2 backdrop-blur-xl md:hidden">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}

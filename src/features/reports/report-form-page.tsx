@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
+import { LoadingState } from "@/components/app/loading-state";
 import { ErrorState } from "@/components/app/states";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
@@ -14,42 +14,33 @@ import type { MasterItem, Site } from "@/types/database";
 
 export function ReportFormPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, appUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
-  const [workItems, setWorkItems] = useState<MasterItem[]>([]);
-  const [wasteItems, setWasteItems] = useState<MasterItem[]>([]);
-  const [safetyItems, setSafetyItems] = useState<MasterItem[]>([]);
   const [workers, setWorkers] = useState<MasterItem[]>([]);
-  const [machines, setMachines] = useState<MasterItem[]>([]);
-  const [vehicles, setVehicles] = useState<MasterItem[]>([]);
-  const [partners, setPartners] = useState<MasterItem[]>([]);
+  const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
+  const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
+  const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [siteData, workData, wasteData, safetyData, workerData, machineData, vehicleData, partnerData] = await Promise.all([
+        const [siteData, workerData, leaseData, disposalData, transportData] = await Promise.all([
           listSites(false),
-          listMasterItems("work", false),
-          listMasterItems("waste", false),
-          listMasterItems("safety", false),
           listMasterItems("worker", false),
-          listMasterItems("machine", false),
-          listMasterItems("vehicle", false),
-          listMasterItems("partner", false),
+          listMasterItems("lease", false),
+          listMasterItems("disposal", false),
+          listMasterItems("transport", false),
         ]);
         setSites(siteData);
-        setWorkItems(workData);
-        setWasteItems(wasteData);
-        setSafetyItems(safetyData);
         setWorkers(workerData);
-        setMachines(machineData);
-        setVehicles(vehicleData);
-        setPartners(partnerData);
+        setLeaseItems(leaseData);
+        setDisposalItems(disposalData);
+        setTransportItems(transportData);
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "初期データの取得に失敗しました");
       } finally {
@@ -66,9 +57,12 @@ export function ReportFormPage() {
     }
     setSubmitting(true);
     try {
-      const reportId = await saveReport(values, user.id, undefined, files);
+      const result = await saveReport(values, user.id, undefined, files);
       toast.success("日報を保存しました");
-      navigate(`/reports/${reportId}`);
+      if (result.uploadErrors.length > 0) {
+        toast.error(result.uploadErrors.join(" / "));
+      }
+      navigate(`/reports/${result.reportId}`);
     } finally {
       setSubmitting(false);
     }
@@ -76,25 +70,19 @@ export function ReportFormPage() {
 
   return (
     <PageShell>
-      <PageHeader title="日報入力" description="作業が終わったらこの画面だけで記録します。" />
+      <PageHeader title="日報入力" description="" />
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-40" />
-          <Skeleton className="h-56" />
-          <Skeleton className="h-56" />
-        </div>
+        <LoadingState message="日報入力に必要なデータを読み込んでいます..." />
       ) : error ? (
         <ErrorState message={error} />
       ) : (
         <ReportForm
           sites={sites}
-          workItems={workItems}
-          wasteItems={wasteItems}
-          safetyItems={safetyItems}
           workers={workers}
-          machines={machines}
-          vehicles={vehicles}
-          partners={partners}
+          leaseItems={leaseItems}
+          disposalItems={disposalItems}
+          transportItems={transportItems}
+          reporterName={appUser?.display_name ?? null}
           submitting={submitting}
           onSubmit={handleSubmit}
         />

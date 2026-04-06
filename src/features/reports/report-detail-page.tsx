@@ -1,80 +1,110 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { PencilLine } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
+import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
-import { deletePhoto, getReportDetail, saveReport } from "@/features/reports/report-service";
+import { deletePhoto, deleteReport, getReportDetail, saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
+import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate } from "@/lib/utils";
-import type { DailyReportDetail, MasterItem, ReportPhoto, Site } from "@/types/database";
+import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, Site } from "@/types/database";
 
-function ChipList({ title, items }: { title: string; items: { id: string; name: string }[] }) {
+function DetailSection({ title, value, emptyLabel = "未入力" }: { title: string; value: string | null | undefined; emptyLabel?: string }) {
   return (
     <div className="space-y-2">
       <p className="text-sm font-semibold">{title}</p>
-      <div className="flex flex-wrap gap-2">
-        {items.length > 0 ? items.map((item) => <Badge key={item.id}>{item.name}</Badge>) : <Badge variant="outline">未選択</Badge>}
+      <pre className="whitespace-pre-wrap rounded-xl bg-background p-3 text-sm font-sans">{value || emptyLabel}</pre>
+    </div>
+  );
+}
+
+function ListSection({ title, rows }: { title: string; rows: string[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-semibold">{title}</p>
+      <div className="rounded-xl bg-background p-3">
+        {rows.length === 0 ? <p className="text-sm text-muted-foreground">未入力</p> : rows.map((row) => <p key={row} className="text-sm">{row}</p>)}
       </div>
     </div>
   );
 }
 
+function groupedWorkerRows(workers: MasterItem[]) {
+  const map = new Map<string, string[]>();
+  workers.forEach((worker) => {
+    const label = worker.group_label?.trim() || "ラベル未設定";
+    const list = map.get(label) ?? [];
+    list.push(worker.name);
+    map.set(label, list);
+  });
+  return Array.from(map.entries()).map(([label, names]) => `${label}: ${names.join(" / ")}`);
+}
+
+function otherVehicleRows(entries: OtherVehicleEntry[]) {
+  return entries.filter((entry) => entry.label.trim()).map((entry) => `${entry.label}: ${entry.count}台`);
+}
+
+function formatEditedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function ReportDetailPage() {
+  const navigate = useNavigate();
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, appUser, isMaster } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [masterOverride, setMasterOverride] = useState(false);
   const [report, setReport] = useState<DailyReportDetail | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
-  const [workItems, setWorkItems] = useState<MasterItem[]>([]);
-  const [wasteItems, setWasteItems] = useState<MasterItem[]>([]);
-  const [safetyItems, setSafetyItems] = useState<MasterItem[]>([]);
   const [workers, setWorkers] = useState<MasterItem[]>([]);
-  const [machines, setMachines] = useState<MasterItem[]>([]);
-  const [vehicles, setVehicles] = useState<MasterItem[]>([]);
-  const [partners, setPartners] = useState<MasterItem[]>([]);
+  const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
+  const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
+  const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
 
   useEffect(() => {
-    if (!id) {
-      return;
-    }
+    if (!id) return;
 
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        const [detail, siteData, workData, wasteData, safetyData, workerData, machineData, vehicleData, partnerData] = await Promise.all([
+        const [detail, siteData, workerData, leaseData, disposalData, transportData] = await Promise.all([
           getReportDetail(id),
           listSites(false),
-          listMasterItems("work", false),
-          listMasterItems("waste", false),
-          listMasterItems("safety", false),
           listMasterItems("worker", false),
-          listMasterItems("machine", false),
-          listMasterItems("vehicle", false),
-          listMasterItems("partner", false),
+          listMasterItems("lease", false),
+          listMasterItems("disposal", false),
+          listMasterItems("transport", false),
         ]);
         setReport(detail);
         setSites(siteData);
-        setWorkItems(workData);
-        setWasteItems(wasteData);
-        setSafetyItems(safetyData);
         setWorkers(workerData);
-        setMachines(machineData);
-        setVehicles(vehicleData);
-        setPartners(partnerData);
+        setLeaseItems(leaseData);
+        setDisposalItems(disposalData);
+        setTransportItems(transportData);
       } catch (nextError) {
         setError(nextError instanceof Error ? nextError.message : "日報の取得に失敗しました");
       } finally {
@@ -85,22 +115,35 @@ export function ReportDetailPage() {
     void load();
   }, [id]);
 
-  const reload = async () => {
-    if (!id) {
+  useEffect(() => {
+    if (!user) {
+      setMasterOverride(false);
       return;
     }
+
+    const loadMasterFlag = async () => {
+      const { data } = await supabase.from("app_users").select("is_master").eq("user_id", user.id).maybeSingle();
+      setMasterOverride(data?.is_master ?? false);
+    };
+
+    void loadMasterFlag();
+  }, [user]);
+
+  const reload = async () => {
+    if (!id) return;
     const detail = await getReportDetail(id);
     setReport(detail);
   };
 
   const handleSubmit = async (values: Parameters<typeof saveReport>[0], files: File[]) => {
-    if (!id || !user) {
-      return;
-    }
+    if (!id || !user) return;
     setSaving(true);
     try {
-      await saveReport(values, user.id, id, files);
+      const result = await saveReport(values, user.id, id, files);
       toast.success("日報を更新しました");
+      if (result.uploadErrors.length > 0) {
+        toast.error(result.uploadErrors.join(" / "));
+      }
       await reload();
       setEditing(false);
     } finally {
@@ -113,10 +156,41 @@ export function ReportDetailPage() {
       await deletePhoto(photo);
       toast.success("写真を削除しました");
       await reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "写真の削除に失敗しました");
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : "写真の削除に失敗しました");
     }
   };
+
+  const handleDeleteReport = async () => {
+    if (!id || !canEditReport) return;
+    if (!window.confirm("この日報を削除します。元に戻せません。")) return;
+
+    try {
+      await deleteReport(id);
+      toast.success("日報を削除しました");
+      navigate("/reports", { replace: true });
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : "日報の削除に失敗しました");
+    }
+  };
+
+  const canEditReport = Boolean(user && report && (report.created_by === user.id || isMaster || masterOverride));
+
+  const leaseRows = useMemo(
+    () => report?.lease_entries.filter((entry) => entry.count > 0).map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.count}台`) ?? [],
+    [report],
+  );
+  const disposalRows = useMemo(
+    () =>
+      report?.disposal_entries
+        .filter((entry) => entry.ton_count > 0 || entry.truck_count > 0)
+        .map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.ton_count}T${entry.truck_count}台`) ?? [],
+    [report],
+  );
+  const transportRows = useMemo(
+    () => report?.transport_entries.filter((entry) => entry.count > 0).map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.count}台`) ?? [],
+    [report],
+  );
 
   return (
     <PageShell>
@@ -124,34 +198,37 @@ export function ReportDetailPage() {
         title="日報詳細"
         description="記録内容の確認と修正ができます。"
         action={
-          !loading && report ? (
-            <Button variant={editing ? "secondary" : "default"} onClick={() => setEditing((current) => !current)}>
-              <PencilLine className="h-4 w-4" />
-              {editing ? "詳細に戻る" : "編集する"}
-            </Button>
+          !loading && report && canEditReport ? (
+            <>
+              <Button variant={editing ? "secondary" : "default"} onClick={() => setEditing((current) => !current)}>
+                <PencilLine className="h-4 w-4" />
+                {editing ? "詳細に戻る" : "編集する"}
+              </Button>
+              {!editing ? (
+                <Button variant="destructive" onClick={() => void handleDeleteReport()}>
+                  <Trash2 className="h-4 w-4" />
+                  削除
+                </Button>
+              ) : null}
+            </>
           ) : null
         }
       />
 
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-52" />
-          <Skeleton className="h-64" />
-        </div>
+        <LoadingState message="日報データを読み込んでいます..." />
       ) : error ? (
         <ErrorState message={error} />
       ) : !report ? (
         <EmptyState title="日報が見つかりません" description="一覧に戻って別の日報を選択してください。" />
-      ) : editing ? (
+      ) : editing && canEditReport ? (
         <ReportForm
           sites={sites}
-          workItems={workItems}
-          wasteItems={wasteItems}
-          safetyItems={safetyItems}
           workers={workers}
-          machines={machines}
-          vehicles={vehicles}
-          partners={partners}
+          leaseItems={leaseItems}
+          disposalItems={disposalItems}
+          transportItems={transportItems}
+          reporterName={appUser?.display_name ?? null}
           initialReport={report}
           submitting={saving}
           onSubmit={handleSubmit}
@@ -161,40 +238,65 @@ export function ReportDetailPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>{report.site?.name ?? "現場未設定"}</CardTitle>
+              <CardTitle className="text-left break-words">{report.site?.name ?? "現場未設定"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">日付</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作業日</p>
                   <p className="mt-1 font-semibold">{formatDate(report.report_date)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">勤務区分</p>
+                  <p className="mt-1 font-semibold">{report.work_shift === "night" ? "夜勤" : "昼勤"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">契約区分</p>
+                  <p className="mt-1 font-semibold">{report.contract_type === "regular" ? "常用" : "請負"}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作業人数</p>
                   <p className="mt-1 font-semibold">{report.worker_count}人</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">住所</p>
-                  <p className="mt-1 font-semibold">{report.site?.address ?? "-"}</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作業進行</p>
+                  <p className="mt-1 font-semibold">{report.progress_status === "completed" ? "終了" : "継続"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作成者</p>
+                  <p className="mt-1 font-semibold">
+                    {report.created_by === user?.id
+                      ? appUser?.display_name || "未設定"
+                      : report.creator_display_name || report.created_by}
+                  </p>
                 </div>
               </div>
-              <ChipList title="作業内容" items={report.work_items} />
-              <ChipList title="廃材種類" items={report.waste_items} />
-              <ChipList title="安全確認" items={report.safety_items} />
-              <ChipList title="作業員" items={report.workers} />
-              <ChipList title="重機" items={report.machines} />
-              <ChipList title="車両" items={report.vehicles} />
-              <ChipList title="協力会社" items={report.partner_companies} />
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">明日の予定</p>
-                <p className="rounded-xl bg-background p-3 text-sm">{report.tomorrow_plan || "未入力"}</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm font-semibold">補足メモ</p>
-                <p className="rounded-xl bg-background p-3 text-sm">{report.note || "未入力"}</p>
-              </div>
+
+              <DetailSection title="諸経費（消耗品等）" value={report.miscellaneous_costs} />
+              <ListSection title="リース関係" rows={leaseRows} />
+              <ListSection title="ゴミ処分" rows={disposalRows} />
+              <ListSection title="車両・運搬" rows={transportRows} />
+              <ListSection title="その他車両" rows={otherVehicleRows(report.other_vehicle_entries)} />
+              <ListSection title="作業員" rows={groupedWorkerRows(report.workers)} />
+              <DetailSection title="上記以外の従業員" value={report.other_workers_note} />
+              <DetailSection title="備考" value={report.remarks} />
             </CardContent>
           </Card>
+
+          {report.edit_logs.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>更新履歴</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {report.edit_logs.map((log) => (
+                  <p key={log.id} className="text-sm text-muted-foreground">
+                    {log.editor_display_name || "未設定"}さんが {formatEditedAt(log.edited_at)} に編集しました
+                  </p>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader>
@@ -207,11 +309,7 @@ export function ReportDetailPage() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {report.photos.map((photo) => (
                     <div key={photo.id} className="overflow-hidden rounded-2xl border bg-background">
-                      <img
-                        src={storageService.getPublicUrl(photo.image_path)}
-                        alt="日報写真"
-                        className="h-44 w-full object-cover"
-                      />
+                      <img src={storageService.getPublicUrl(photo.image_path)} alt="日報写真" className="h-44 w-full object-cover" />
                     </div>
                   ))}
                 </div>

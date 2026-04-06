@@ -4,15 +4,31 @@ import type {
   DailyReport,
   DailyReportDetail,
   MasterItem,
+  OtherVehicleEntry,
+  ReportEditLog,
   ReportFormValues,
   ReportListFilters,
   ReportPhoto,
   Site,
 } from "@/types/database";
 
-type JoinRow = { id: string; name: string; sort_order: number; is_active: boolean; created_at?: string; updated_at?: string };
+export type SaveReportResult = {
+  reportId: string;
+  uploadErrors: string[];
+};
 
-function mapJoinedItems(rows: Array<Record<string, JoinRow | JoinRow[] | null>>, key: string) {
+type JoinedRow<T extends string> = {
+  [K in T]: MasterItem | MasterItem[] | null;
+};
+
+function normalizeJoinedItem(value: MasterItem | MasterItem[] | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function mapJoinedItems<T extends string>(rows: Array<JoinedRow<T>>, key: T) {
   return rows
     .flatMap((row) => {
       const value = row[key];
@@ -21,7 +37,7 @@ function mapJoinedItems(rows: Array<Record<string, JoinRow | JoinRow[] | null>>,
       }
       return Array.isArray(value) ? value : [value];
     })
-    .filter((row): row is JoinRow => Boolean(row));
+    .filter(Boolean) as MasterItem[];
 }
 
 export async function listReports(filters: ReportListFilters = {}) {
@@ -47,187 +63,159 @@ export async function listReports(filters: ReportListFilters = {}) {
   }
 
   return (data ?? []).map((row) => ({
-    ...(row as DailyReport),
+    ...(row as Omit<DailyReport, "other_vehicle_entries">),
+    other_vehicle_entries: (((row as { other_vehicle_entries?: OtherVehicleEntry[] | null }).other_vehicle_entries ?? []) as OtherVehicleEntry[]),
     site: (row as { sites: Site | null }).sites,
   })) as Array<DailyReport & { site: Site | null }>;
 }
 
 export async function getReportDetail(id: string): Promise<DailyReportDetail> {
-  const [{ data: report, error: reportError }, workResult, wasteResult, safetyResult, workerResult, machineResult, vehicleResult, partnerResult, photoResult] = await Promise.all([
+  const [reportResult, workerResult, leaseResult, disposalResult, transportResult, photoResult, editLogResult] = await Promise.all([
     supabase.from("daily_reports").select("*, sites(*)").eq("id", id).single(),
+    supabase.from("daily_report_workers").select("workers(*)").eq("report_id", id),
+    supabase.from("daily_report_lease_items").select("id, lease_item_id, count, lease_items(*)").eq("report_id", id).order("created_at"),
     supabase
-      .from("daily_report_work_items")
-      .select("work_items(*)")
-      .eq("report_id", id),
+      .from("daily_report_disposal_items")
+      .select("id, disposal_item_id, ton_count, truck_count, disposal_items(*)")
+      .eq("report_id", id)
+      .order("created_at"),
     supabase
-      .from("daily_report_waste_items")
-      .select("waste_items(*)")
-      .eq("report_id", id),
-    supabase
-      .from("daily_report_safety_items")
-      .select("safety_items(*)")
-      .eq("report_id", id),
-    supabase
-      .from("daily_report_workers")
-      .select("workers(*)")
-      .eq("report_id", id),
-    supabase
-      .from("daily_report_machines")
-      .select("machines(*)")
-      .eq("report_id", id),
-    supabase
-      .from("daily_report_vehicles")
-      .select("vehicles(*)")
-      .eq("report_id", id),
-    supabase
-      .from("daily_report_partner_companies")
-      .select("partner_companies(*)")
-      .eq("report_id", id),
+      .from("daily_report_transport_items")
+      .select("id, transport_item_id, count, transport_items(*)")
+      .eq("report_id", id)
+      .order("created_at"),
     supabase.from("report_photos").select("*").eq("report_id", id).order("created_at"),
+    supabase.from("report_edit_logs").select("*").eq("report_id", id).order("edited_at", { ascending: false }).limit(3),
   ]);
 
-  if (reportError) {
-    throw reportError;
-  }
-  if (workResult.error) {
-    throw workResult.error;
-  }
-  if (wasteResult.error) {
-    throw wasteResult.error;
-  }
-  if (safetyResult.error) {
-    throw safetyResult.error;
-  }
-  if (workerResult.error) {
-    throw workerResult.error;
-  }
-  if (machineResult.error) {
-    throw machineResult.error;
-  }
-  if (vehicleResult.error) {
-    throw vehicleResult.error;
-  }
-  if (partnerResult.error) {
-    throw partnerResult.error;
-  }
-  if (photoResult.error) {
-    throw photoResult.error;
-  }
+  if (reportResult.error) throw reportResult.error;
+  if (workerResult.error) throw workerResult.error;
+  if (leaseResult.error) throw leaseResult.error;
+  if (disposalResult.error) throw disposalResult.error;
+  if (transportResult.error) throw transportResult.error;
+  if (photoResult.error) throw photoResult.error;
+  if (editLogResult.error) throw editLogResult.error;
+
+  const report = reportResult.data as Omit<DailyReport, "other_vehicle_entries"> & { sites: Site | null; other_vehicle_entries?: OtherVehicleEntry[] | null };
+  const editorIds = Array.from(new Set([report.created_by, ...((editLogResult.data ?? []) as Array<{ edited_by: string }>).map((log) => log.edited_by)]));
+  const { data: appUsers } = await supabase.from("app_users").select("user_id, display_name").in("user_id", editorIds);
+  const displayNameMap = new Map((appUsers ?? []).map((user) => [user.user_id, user.display_name ?? null]));
 
   return {
-    ...(report as DailyReport),
-    site: (report as { sites: Site | null }).sites,
-    work_items: mapJoinedItems(
-      (workResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "work_items",
-    ) as MasterItem[],
-    waste_items: mapJoinedItems(
-      (wasteResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "waste_items",
-    ) as MasterItem[],
-    safety_items: mapJoinedItems(
-      (safetyResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "safety_items",
-    ) as MasterItem[],
-    workers: mapJoinedItems(
-      (workerResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "workers",
-    ) as MasterItem[],
-    machines: mapJoinedItems(
-      (machineResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "machines",
-    ) as MasterItem[],
-    vehicles: mapJoinedItems(
-      (vehicleResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "vehicles",
-    ) as MasterItem[],
-    partner_companies: mapJoinedItems(
-      (partnerResult.data ?? []) as unknown as Array<Record<string, JoinRow | JoinRow[] | null>>,
-      "partner_companies",
-    ) as MasterItem[],
+    ...report,
+    other_vehicle_entries: (report.other_vehicle_entries ?? []) as OtherVehicleEntry[],
+    site: report.sites,
+    creator_display_name: displayNameMap.get(report.created_by) ?? null,
+    workers: mapJoinedItems((workerResult.data ?? []) as Array<JoinedRow<"workers">>, "workers"),
+    lease_entries: ((leaseResult.data ?? []) as Array<{ id: string; lease_item_id: string; count: number; lease_items: MasterItem | MasterItem[] | null }>).map((row) => ({
+      id: row.id,
+      lease_item_id: row.lease_item_id,
+      count: row.count,
+      item: normalizeJoinedItem(row.lease_items),
+    })),
+    disposal_entries: ((disposalResult.data ?? []) as Array<{
+      id: string;
+      disposal_item_id: string;
+      ton_count: number;
+      truck_count: number;
+      disposal_items: MasterItem | MasterItem[] | null;
+    }>).map((row) => ({
+      id: row.id,
+      disposal_item_id: row.disposal_item_id,
+      ton_count: row.ton_count,
+      truck_count: row.truck_count,
+      item: normalizeJoinedItem(row.disposal_items),
+    })),
+    transport_entries: ((transportResult.data ?? []) as Array<{
+      id: string;
+      transport_item_id: string;
+      count: number;
+      transport_items: MasterItem | MasterItem[] | null;
+    }>).map((row) => ({
+      id: row.id,
+      transport_item_id: row.transport_item_id,
+      count: row.count,
+      item: normalizeJoinedItem(row.transport_items),
+    })),
     photos: (photoResult.data ?? []) as ReportPhoto[],
-  };
-}
-
-async function replaceReportRelations(reportId: string, table: string, columnName: string, ids: string[]) {
-  const { error: deleteError } = await supabase.from(table).delete().eq("report_id", reportId);
-  if (deleteError) {
-    throw deleteError;
-  }
-
-  if (ids.length === 0) {
-    return;
-  }
-
-  const { error: insertError } = await supabase
-    .from(table)
-    .insert(ids.map((itemId) => ({ report_id: reportId, [columnName]: itemId })));
-
-  if (insertError) {
-    throw insertError;
-  }
-}
-
-export async function saveReport(
-  values: ReportFormValues,
-  userId: string,
-  reportId?: string,
-  newFiles: File[] = [],
-) {
-  const payload = {
-    id: reportId,
-    site_id: values.site_id,
-    report_date: values.report_date,
-    worker_count: values.worker_count,
-    tomorrow_plan: values.tomorrow_plan || null,
-    note: values.note || null,
-    created_by: userId,
-  };
-
-  const { data, error } = await supabase.from("daily_reports").upsert(payload, { onConflict: "id" }).select().single();
-  if (error) {
-    throw error;
-  }
-
-  const savedReportId = data.id as string;
-
-  await Promise.all([
-    replaceReportRelations(savedReportId, "daily_report_work_items", "work_item_id", values.work_item_ids),
-    replaceReportRelations(savedReportId, "daily_report_waste_items", "waste_item_id", values.waste_item_ids),
-    replaceReportRelations(savedReportId, "daily_report_safety_items", "safety_item_id", values.safety_item_ids),
-    replaceReportRelations(savedReportId, "daily_report_workers", "worker_id", values.worker_ids),
-    replaceReportRelations(savedReportId, "daily_report_machines", "machine_id", values.machine_ids),
-    replaceReportRelations(savedReportId, "daily_report_vehicles", "vehicle_id", values.vehicle_ids),
-    replaceReportRelations(
-      savedReportId,
-      "daily_report_partner_companies",
-      "partner_company_id",
-      values.partner_company_ids,
+    edit_logs: ((editLogResult.data ?? []) as Array<{ id: string; report_id: string; edited_by: string; edited_at: string }>).map(
+      (log) =>
+        ({
+          ...log,
+          editor_display_name: displayNameMap.get(log.edited_by) ?? null,
+        }) satisfies ReportEditLog,
     ),
-  ]);
+  };
+}
+
+export async function saveReport(values: ReportFormValues, _userId: string, reportId?: string, newFiles: File[] = []): Promise<SaveReportResult> {
+  const otherVehicleEntries = values.other_vehicle_entries.filter((entry) => entry.label.trim() && entry.count > 0);
+
+  const { data, error } = await supabase.rpc("save_daily_report", {
+    p_report_id: reportId ?? null,
+    p_site_id: values.site_id,
+    p_report_date: values.report_date,
+    p_worker_count: values.worker_count,
+    p_work_shift: values.work_shift,
+    p_contract_type: values.contract_type,
+    p_miscellaneous_costs: values.miscellaneous_costs || null,
+    p_other_vehicle_entries: otherVehicleEntries,
+    p_other_workers_note: values.other_workers_note || null,
+    p_remarks: values.remarks || null,
+    p_progress_status: values.progress_status,
+    p_worker_ids: values.worker_ids,
+    p_lease_entries: values.lease_entries,
+    p_disposal_entries: values.disposal_entries,
+    p_transport_entries: values.transport_entries,
+  });
+  if (error) throw error;
+
+  const savedReportId = data as string;
+  const uploadErrors: string[] = [];
 
   if (newFiles.length > 0) {
-    const uploadedPaths = await Promise.all(
-      newFiles.map((file) => storageService.uploadReportPhoto(file, savedReportId)),
-    );
-    const { error: photoInsertError } = await supabase.from("report_photos").insert(
-      uploadedPaths.map((image_path) => ({
-        report_id: savedReportId,
-        image_path,
-      })),
-    );
-    if (photoInsertError) {
-      throw photoInsertError;
+    const uploadResults = await Promise.allSettled(newFiles.map((file) => storageService.uploadReportPhoto(file, savedReportId)));
+    const uploadedUrls = uploadResults.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+    const failedCount = uploadResults.length - uploadedUrls.length;
+
+    if (uploadedUrls.length > 0) {
+      const { error: photoInsertError } = await supabase.from("report_photos").insert(
+        uploadedUrls.map((image_path) => ({
+          report_id: savedReportId,
+          image_path,
+        })),
+      );
+      if (photoInsertError) {
+        uploadErrors.push("写真URLの保存に失敗しました");
+      }
+    }
+
+    if (failedCount > 0) {
+      uploadErrors.push(`${failedCount}件の写真アップロードに失敗しました`);
     }
   }
 
-  return savedReportId;
+  return { reportId: savedReportId, uploadErrors };
 }
 
 export async function deletePhoto(photo: ReportPhoto) {
-  await storageService.removePhoto(photo.image_path);
   const { error } = await supabase.from("report_photos").delete().eq("id", photo.id);
-  if (error) {
-    throw error;
+  if (error) throw error;
+
+  const removeResult = await Promise.allSettled([storageService.removePhoto(photo.image_path)]);
+  if (removeResult[0]?.status === "rejected") {
+    throw new Error("DBから写真を削除しましたが、外部ファイルの削除に失敗しました。");
+  }
+}
+
+export async function deleteReport(reportId: string) {
+  const detail = await getReportDetail(reportId);
+
+  const { error } = await supabase.from("daily_reports").delete().eq("id", reportId);
+  if (error) throw error;
+
+  const removeResults = await Promise.allSettled(detail.photos.map((photo) => storageService.removePhoto(photo.image_path)));
+  if (removeResults.some((result) => result.status === "rejected")) {
+    throw new Error("日報は削除しましたが、一部の外部画像削除に失敗しました。");
   }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   closestCenter,
@@ -25,6 +25,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
+import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -35,55 +36,54 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
+import { archiveMasterItem, listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
 import { cn } from "@/lib/utils";
 import type { MasterItem, MasterItemType } from "@/types/database";
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return fallback;
+}
+
 const masterSchema = z.object({
   name: z.string().min(1, "項目名を入力してください"),
+  group_label: z.string().max(100, "100文字以内で入力してください").optional(),
   is_active: z.boolean(),
 });
 
 type MasterFormValues = z.infer<typeof masterSchema>;
 
 const pageLabels: Record<MasterItemType, { title: string; description: string }> = {
-  work: { title: "作業項目マスタ", description: "日報入力時の作業内容チェック項目です。" },
-  waste: { title: "廃材項目マスタ", description: "日報入力時の廃材種類チェック項目です。" },
-  safety: { title: "安全確認項目マスタ", description: "日報入力時の安全確認チェック項目です。" },
-  worker: { title: "作業員マスタ", description: "現場に入る作業員の一覧です。" },
-  machine: { title: "重機マスタ", description: "現場で利用する重機の一覧です。" },
-  vehicle: { title: "車両マスタ", description: "利用する車両の一覧です。" },
-  partner: { title: "協力会社マスタ", description: "協力会社の一覧です。" },
+  worker: { title: "作業員マスタ", description: "現場に入る作業員の一覧です。ラベルで会社や所属ごとに分けられます。" },
+  lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
+  disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },
+  transport: { title: "車両・運搬マスタ", description: "2TC や乗用車など、使用する車両の一覧です。" },
 };
 
 const itemLabels: Record<MasterItemType, string> = {
-  work: "作業項目",
-  waste: "廃材項目",
-  safety: "安全確認項目",
   worker: "作業員",
-  machine: "重機",
-  vehicle: "車両",
-  partner: "協力会社",
+  lease: "リース関係",
+  disposal: "ゴミ処分",
+  transport: "車両・運搬",
 };
 
 const routeTypeMap: Record<string, MasterItemType> = {
-  "work-items": "work",
-  "waste-items": "waste",
-  "safety-items": "safety",
   workers: "worker",
-  machines: "machine",
-  vehicles: "vehicle",
-  partners: "partner",
+  "lease-items": "lease",
+  "disposal-items": "disposal",
+  "transport-items": "transport",
 };
 
 export function MastersPage() {
   const { type } = useParams();
   const masterType = (type ? routeTypeMap[type] : null) ?? null;
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [dialogKey, setDialogKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -99,6 +99,7 @@ export function MastersPage() {
     resolver: zodResolver(masterSchema),
     defaultValues: {
       name: "",
+      group_label: "",
       is_active: true,
     },
   });
@@ -106,19 +107,23 @@ export function MastersPage() {
   const meta = useMemo(() => (masterType ? pageLabels[masterType] : null), [masterType]);
   const itemLabel = masterType ? itemLabels[masterType] : "";
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!masterType) {
       return;
     }
-    setLoading(true);
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      const data = await listMasterItems(masterType, true);
+      const data = await listMasterItems(masterType, false);
       setItems(data);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "マスタ項目の取得に失敗しました");
+      setError(getErrorMessage(nextError, "マスタ項目の取得に失敗しました"));
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
     }
   }, [masterType]);
 
@@ -128,17 +133,19 @@ export function MastersPage() {
 
   const openCreate = () => {
     setEditingItem(null);
-    form.reset({ name: "", is_active: true });
+    form.reset({ name: "", group_label: "", is_active: true });
+    setDialogKey((current) => current + 1);
     setOpen(true);
   };
 
   const openEdit = (item: MasterItem) => {
     setEditingItem(item);
-    form.reset({ name: item.name, is_active: item.is_active });
+    form.reset({ name: item.name, group_label: item.group_label ?? "", is_active: item.is_active });
+    setDialogKey((current) => current + 1);
     setOpen(true);
   };
 
-  const handleSubmit = form.handleSubmit(async (values) => {
+  const submitForm = form.handleSubmit(async (values) => {
     if (!masterType) {
       return;
     }
@@ -146,16 +153,51 @@ export function MastersPage() {
       await upsertMasterItem(masterType, {
         id: editingItem?.id,
         name: values.name,
+        group_label: masterType === "worker" ? values.group_label || null : null,
         sort_order: editingItem?.sort_order ?? items.length,
         is_active: values.is_active,
       });
       toast.success(editingItem ? "項目を更新しました" : "項目を追加しました");
       setOpen(false);
-      await load();
+      setDialogKey((current) => current + 1);
+      form.reset({ name: "", group_label: "", is_active: true });
+      await load({ silent: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存に失敗しました");
+      toast.error(getErrorMessage(error, "保存に失敗しました"));
     }
   });
+
+  const triggerSubmit = () => {
+    if (form.formState.isSubmitting) {
+      return;
+    }
+    formRef.current?.requestSubmit();
+  };
+
+  const handleDelete = async () => {
+    if (!masterType || !editingItem) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `「${editingItem.name}」を削除します。\nこの項目は今後の日報入力では選べなくなります。\n過去の日報データにはそのまま残ります。`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await archiveMasterItem(masterType, editingItem);
+      toast.success("項目を削除しました");
+      setOpen(false);
+      setEditingItem(null);
+      setDialogKey((current) => current + 1);
+      form.reset({ name: "", group_label: "", is_active: true });
+      await load({ silent: true });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "削除に失敗しました"));
+    }
+  };
 
   const persistOrder = async (nextItems: MasterItem[]) => {
     if (!masterType) {
@@ -167,8 +209,8 @@ export function MastersPage() {
       await reorderMasterItems(masterType, normalizedItems);
       toast.success("表示順を更新しました");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "表示順の更新に失敗しました");
-      await load();
+      toast.error(getErrorMessage(error, "表示順の更新に失敗しました"));
+      await load({ silent: true });
     }
   };
 
@@ -234,6 +276,7 @@ export function MastersPage() {
                 </button>
                   <p className="break-all text-base font-bold sm:text-lg">{item.name}</p>
                   <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
+                  {masterType === "worker" && item.group_label ? <Badge variant="outline">{item.group_label}</Badge> : null}
                 </div>
                 <p className="hidden text-sm text-muted-foreground md:block">
                   名前横のアイコンを長押しまたはドラッグして表示順を変更できます
@@ -290,57 +333,85 @@ export function MastersPage() {
         title={meta.title}
         description={meta.description}
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" />
-                項目追加
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
+          <>
+            <Button onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              項目追加
+            </Button>
+            <Dialog
+              open={open}
+              onOpenChange={(nextOpen) => {
+                setOpen(nextOpen);
+                if (!nextOpen) {
+                  setDialogKey((current) => current + 1);
+                  setEditingItem(null);
+                  form.reset({ name: "", group_label: "", is_active: true });
+                }
+              }}
+            >
+            <DialogContent key={dialogKey}>
               <DialogHeader>
                 <DialogTitle>{editingItem ? `${itemLabel}の編集` : `${itemLabel}の追加`}</DialogTitle>
                 <DialogDescription>
                   {editingItem ? `${itemLabel}の登録内容を更新します。` : `新しい${itemLabel}を登録します。`}
                 </DialogDescription>
               </DialogHeader>
-              <form className="space-y-4" onSubmit={handleSubmit}>
+              <form
+                ref={formRef}
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitForm();
+                }}
+              >
                 <div className="space-y-2">
                   <Label htmlFor="master-name">項目名</Label>
                   <Input id="master-name" {...form.register("name")} />
                 </div>
+                {masterType === "worker" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="master-group-label">ラベル</Label>
+                    <Input
+                      id="master-group-label"
+                      placeholder="例: 大吾興業"
+                      {...form.register("group_label")}
+                    />
+                    <p className="text-xs text-muted-foreground">※日報入力では同じラベルごとに作業員をまとめて表示しますので必ず同じ名前で登録をお願いします。</p>
+                  </div>
+                ) : null}
                 <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
                   <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
                   有効な項目として表示する
                 </label>
-                <Button type="submit" className="w-full">
-                  保存する
-                </Button>
+                <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-1 pt-4">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      size="lg"
+                      onClick={triggerSubmit}
+                      onTouchEnd={(event) => {
+                        event.preventDefault();
+                        triggerSubmit();
+                      }}
+                    >
+                      保存する
+                    </Button>
+                    {editingItem ? (
+                      <Button type="button" variant="destructive" className="w-full" size="lg" onClick={() => void handleDelete()}>
+                        削除
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
               </form>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </>
         }
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Link
-          to="/masters/work-items"
-          className={cn(buttonVariants({ variant: masterType === "work" ? "default" : "outline", size: "sm" }))}
-        >
-          作業項目
-        </Link>
-        <Link
-          to="/masters/waste-items"
-          className={cn(buttonVariants({ variant: masterType === "waste" ? "default" : "outline", size: "sm" }))}
-        >
-          廃材項目
-        </Link>
-        <Link
-          to="/masters/safety-items"
-          className={cn(buttonVariants({ variant: masterType === "safety" ? "default" : "outline", size: "sm" }))}
-        >
-          安全確認
-        </Link>
         <Link
           to="/masters/workers"
           className={cn(buttonVariants({ variant: masterType === "worker" ? "default" : "outline", size: "sm" }))}
@@ -348,34 +419,37 @@ export function MastersPage() {
           作業員
         </Link>
         <Link
-          to="/masters/machines"
-          className={cn(buttonVariants({ variant: masterType === "machine" ? "default" : "outline", size: "sm" }))}
+          to="/masters/lease-items"
+          className={cn(buttonVariants({ variant: masterType === "lease" ? "default" : "outline", size: "sm" }))}
         >
-          重機
+          リース関係
         </Link>
         <Link
-          to="/masters/vehicles"
-          className={cn(buttonVariants({ variant: masterType === "vehicle" ? "default" : "outline", size: "sm" }))}
+          to="/masters/disposal-items"
+          className={cn(buttonVariants({ variant: masterType === "disposal" ? "default" : "outline", size: "sm" }))}
         >
-          車両
+          ゴミ処分
         </Link>
         <Link
-          to="/masters/partners"
-          className={cn(buttonVariants({ variant: masterType === "partner" ? "default" : "outline", size: "sm" }))}
+          to="/masters/transport-items"
+          className={cn(buttonVariants({ variant: masterType === "transport" ? "default" : "outline", size: "sm" }))}
         >
-          協力会社
+          車両・運搬
         </Link>
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-16" />
-        </div>
+        <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} />
       ) : error ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (
         <EmptyState title="項目がありません" description="最初の項目を追加してください。" />
+      ) : open ? (
+        <div className="grid gap-3">
+          {items.map((item) => (
+            <SortableMasterCard key={item.id} item={item} />
+          ))}
+        </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)}>
           <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>

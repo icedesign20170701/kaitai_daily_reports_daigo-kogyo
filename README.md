@@ -60,7 +60,17 @@ npm run dev
 ## Supabase 側の補足
 
 - 画像ファイル本体は自社サーバーなど外部ストレージへ保存し、Supabase の `report_photos.image_path` には画像URLだけを保存します。
+- `app_users.is_master = true` のユーザーは、他ユーザーが作成した日報も編集できます。
 - 将来マルチテナント化する際は、各テーブルに `company_id` を追加し、RLS を `auth.uid()` と `company_id` で絞り込んでください。
+
+### マスターアカウント設定例
+
+```sql
+insert into public.app_users (user_id, is_master)
+values ('AUTH_USERSのUUIDをここに入れる', true)
+on conflict (user_id)
+do update set is_master = excluded.is_master;
+```
 
 ## 画像アップロードAPI仕様
 

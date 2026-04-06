@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -6,15 +6,16 @@ import { endOfMonth, format, startOfMonth, subMonths, addMonths } from "date-fns
 import { ja } from "date-fns/locale";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
+import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { exportReportsCsv } from "@/features/reports/report-export";
+import { useAuth } from "@/features/auth/auth-context";
 import { listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue } from "@/lib/utils";
@@ -33,28 +34,97 @@ function DateFilterField({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const selectedDate = value ? new Date(`${value}T00:00:00`) : undefined;
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="min-w-0 space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <label className="relative block overflow-hidden rounded-xl border bg-card px-3 py-3 shadow-sm">
-        <input
-          id={id}
-          type="date"
-          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium">{formatDate(value)}</span>
-          <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
-        </div>
-      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            id={id}
+            type="button"
+            className="flex w-full items-center justify-between gap-2 overflow-hidden rounded-xl border bg-card px-3 py-3 text-left shadow-sm"
+          >
+            <span className="truncate text-sm font-medium">{selectedDate ? formatDate(value) : "日付を選択してください"}</span>
+            <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto p-3">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            defaultMonth={selectedDate}
+            onSelect={(date) => {
+              if (!date) return;
+              onChange(toDateInputValue(date));
+              setOpen(false);
+            }}
+          />
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
+function MonthPicker({
+  value,
+  onChange,
+}: {
+  value: Date;
+  onChange: (value: Date) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="block w-full cursor-pointer rounded-2xl bg-secondary px-4 py-3 text-left transition hover:bg-accent">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground">表示月</p>
+              <p className="mt-1 text-xl font-extrabold md:text-lg">{format(value, "yyyy年M月", { locale: ja })}</p>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
+              <CalendarDays className="h-4 w-4" />
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground md:text-[11px]">クリックして月変更</p>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-3">
+        <Calendar
+          mode="single"
+          selected={value}
+          defaultMonth={value}
+          onSelect={(date) => {
+            if (!date) return;
+            onChange(startOfMonth(date));
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
+  const isCompleted = status === "completed";
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-[68px] items-center justify-center rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+        isCompleted ? "bg-red-100 text-red-700" : "bg-sky-100 text-sky-700",
+      )}
+    >
+      {isCompleted ? "終了" : "継続"}
+    </span>
+  );
+}
+
 export function ReportsPage() {
-  const monthDesktopInputRef = useRef<HTMLInputElement | null>(null);
+  const { user, appUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -122,10 +192,10 @@ export function ReportsPage() {
     }));
   }, [reports]);
 
-  const monthInputValue = format(currentMonth, "yyyy-MM-dd");
   const filterSummary = `${formatDate(filters.from)}〜${formatDate(filters.to)} / ${
     filters.siteId === "all" ? "すべての現場" : sites.find((site) => site.id === filters.siteId)?.name ?? "現場未選択"
   }`;
+  const greetingName = appUser?.display_name || user?.email || "ユーザー";
 
   const handleExportCsv = async () => {
     try {
@@ -136,23 +206,9 @@ export function ReportsPage() {
     }
   };
 
-  const openDesktopMonthPicker = () => {
-    const input = monthDesktopInputRef.current;
-    if (!input) {
-      return;
-    }
-
-    if (typeof input.showPicker === "function") {
-      input.showPicker();
-      return;
-    }
-
-    input.focus();
-    input.click();
-  };
-
   return (
     <PageShell>
+      <p className="mb-4 text-sm font-medium text-muted-foreground">{greetingName}さん、お疲れ様です。</p>
       <PageHeader
         title="日報一覧"
         description="月ごとに日報を確認し、日付単位でまとまりを見られます。"
@@ -181,29 +237,7 @@ export function ReportsPage() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            <label className="relative block cursor-pointer rounded-2xl bg-secondary px-4 py-3 transition hover:bg-accent">
-              <input
-                type="date"
-                className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-                value={monthInputValue}
-                onChange={(event) => {
-                  if (!event.target.value) {
-                    return;
-                  }
-                  setCurrentMonth(startOfMonth(new Date(`${event.target.value}T00:00:00`)));
-                }}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground">表示月</p>
-                  <p className="mt-1 text-xl font-extrabold">{format(currentMonth, "yyyy年M月", { locale: ja })}</p>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-                  <CalendarDays className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">タップしてカレンダーから月を選択</p>
-            </label>
+            <MonthPicker value={currentMonth} onChange={setCurrentMonth} />
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
                 <p className="text-xs font-semibold text-muted-foreground">件数</p>
@@ -225,37 +259,7 @@ export function ReportsPage() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
-            <label
-              className="relative block cursor-pointer rounded-2xl bg-secondary px-4 py-3 transition hover:bg-accent"
-              onClick={(event) => {
-                event.preventDefault();
-                openDesktopMonthPicker();
-              }}
-            >
-              <input
-                ref={monthDesktopInputRef}
-                type="date"
-                className="absolute h-0 w-0 opacity-0"
-                value={monthInputValue}
-                onChange={(event) => {
-                  if (!event.target.value) {
-                    return;
-                  }
-                  setCurrentMonth(startOfMonth(new Date(`${event.target.value}T00:00:00`)));
-                }}
-                tabIndex={-1}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground">表示月</p>
-                  <p className="mt-1 text-lg font-extrabold">{format(currentMonth, "yyyy年M月", { locale: ja })}</p>
-                </div>
-                <div className="rounded-xl border border-border/70 bg-background/70 p-2 text-primary">
-                  <CalendarDays className="h-4 w-4" />
-                </div>
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">クリックして月変更</p>
-            </label>
+            <MonthPicker value={currentMonth} onChange={setCurrentMonth} />
             <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
               <p className="text-xs font-semibold text-muted-foreground">件数</p>
               <p className="mt-1 text-2xl font-extrabold">{summary.count}</p>
@@ -300,19 +304,21 @@ export function ReportsPage() {
               />
               <div className="min-w-0 space-y-2">
                 <Label>現場</Label>
-                <Select value={filters.siteId} onValueChange={(value) => setFilters((current) => ({ ...current, siteId: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">すべての現場</SelectItem>
+                <div className="relative">
+                  <select
+                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                    value={filters.siteId}
+                    onChange={(event) => setFilters((current) => ({ ...current, siteId: event.target.value }))}
+                  >
+                    <option value="all">すべての現場</option>
                     {sites.map((site) => (
-                      <SelectItem key={site.id} value={site.id}>
+                      <option key={site.id} value={site.id}>
                         {site.name}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+                </div>
               </div>
               </div>
             </div>
@@ -321,11 +327,7 @@ export function ReportsPage() {
       </Card>
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-16" />
-          <Skeleton className="h-16" />
-        </div>
+        <LoadingState message="日報一覧を読み込んでいます..." />
       ) : error ? (
         <ErrorState message={error} />
       ) : reports.length === 0 ? (
@@ -335,7 +337,7 @@ export function ReportsPage() {
           {groupedReports.map((group) => (
             <section key={group.date} className="space-y-3">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold">{formatDate(group.date)}</h2>
                   <p className="text-sm text-muted-foreground">{group.items.length}件の日報</p>
                 </div>
@@ -344,37 +346,64 @@ export function ReportsPage() {
               <Card className="md:hidden">
                 <CardContent className="space-y-3 pt-5">
                   {group.items.map((report) => (
-                    <Link key={report.id} to={`/reports/${report.id}`} className="block rounded-2xl border bg-background p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-bold">{report.site?.name ?? "現場未設定"}</p>
-                          <p className="text-sm text-muted-foreground">{report.worker_count}人 / {report.site?.address ?? "住所未登録"}</p>
+                    <Link key={report.id} to={`/reports/${report.id}`} className="block rounded-xl border bg-background p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-2">
+                          <ProgressBadge status={report.progress_status} />
                         </div>
-                        <Badge>{report.worker_count}人</Badge>
+                        <div className="min-w-0">
+                          <p className="truncate font-bold">{report.site?.name ?? "現場未設定"}</p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            区分: {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">人数: {report.worker_count}人</p>
+                        </div>
                       </div>
-                      <p className="mt-3 text-sm text-muted-foreground">{report.tomorrow_plan || "明日の予定なし"}</p>
+                      <p
+                        className="mt-3 text-sm leading-6 text-muted-foreground"
+                        style={{
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {report.remarks || "備考なし"}
+                      </p>
                     </Link>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="hidden md:block">
+              <Card className="hidden md:block rounded-xl">
                 <CardContent className="pt-5">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>現場</TableHead>
-                        <TableHead>人数</TableHead>
-                        <TableHead>明日の予定</TableHead>
+                        <TableHead className="w-[28%] min-w-[180px]">現場名</TableHead>
+                        <TableHead className="w-[18%] min-w-[140px]">区分</TableHead>
+                        <TableHead className="w-[10%] min-w-[76px]">人数</TableHead>
+                        <TableHead className="w-[10%] min-w-[92px]">進捗</TableHead>
+                        <TableHead className="w-[24%] min-w-[180px]">備考</TableHead>
                         <TableHead className="w-[120px]">詳細</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {group.items.map((report, index) => (
                         <TableRow key={report.id} className={cn(index % 2 === 1 && "bg-secondary/20")}>
-                          <TableCell>{report.site?.name ?? "-"}</TableCell>
-                          <TableCell>{report.worker_count}人</TableCell>
-                          <TableCell className="max-w-sm truncate">{report.tomorrow_plan ?? "-"}</TableCell>
+                          <TableCell className="max-w-0">
+                            <span className="block truncate">{report.site?.name ?? "-"}</span>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{report.worker_count}人</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <ProgressBadge status={report.progress_status} />
+                          </TableCell>
+                          <TableCell className="max-w-0">
+                            <span className="block truncate">{report.remarks ?? "-"}</span>
+                          </TableCell>
                           <TableCell>
                             <Link
                               to={`/reports/${report.id}`}

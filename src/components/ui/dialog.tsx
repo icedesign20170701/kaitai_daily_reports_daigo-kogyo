@@ -29,12 +29,12 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-card p-6 shadow-soft",
+        "fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-card shadow-soft",
         className,
       )}
       {...props}
     >
-      {children}
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       <DialogClose className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground hover:bg-accent">
         <X className="h-4 w-4" />
         <span className="sr-only">閉じる</span>

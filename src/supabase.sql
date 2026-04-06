@@ -1,14 +1,11 @@
 create extension if not exists "pgcrypto";
 
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
+create table if not exists public.app_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  display_name text,
+  is_master boolean not null default false,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.sites (
   id uuid primary key default gen_random_uuid(),
@@ -24,36 +21,14 @@ create table if not exists public.daily_reports (
   site_id uuid not null references public.sites(id),
   report_date date not null,
   worker_count integer not null check (worker_count > 0),
-  tomorrow_plan text,
-  note text,
+  work_shift text not null check (work_shift in ('day', 'night')),
+  contract_type text not null check (contract_type in ('contract', 'regular')),
+  miscellaneous_costs text,
+  other_vehicle_entries jsonb not null default '[]'::jsonb,
+  other_workers_note text,
+  remarks text,
+  progress_status text not null check (progress_status in ('continuing', 'completed')),
   created_by uuid not null references auth.users(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.work_items (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  sort_order integer not null default 0,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.waste_items (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  sort_order integer not null default 0,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.safety_items (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  sort_order integer not null default 0,
-  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -61,13 +36,14 @@ create table if not exists public.safety_items (
 create table if not exists public.workers (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  group_label text,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.machines (
+create table if not exists public.lease_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
@@ -76,7 +52,7 @@ create table if not exists public.machines (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.vehicles (
+create table if not exists public.disposal_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
@@ -85,37 +61,13 @@ create table if not exists public.vehicles (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.partner_companies (
+create table if not exists public.transport_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
-
-create table if not exists public.daily_report_work_items (
-  id uuid primary key default gen_random_uuid(),
-  report_id uuid not null references public.daily_reports(id) on delete cascade,
-  work_item_id uuid not null references public.work_items(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, work_item_id)
-);
-
-create table if not exists public.daily_report_waste_items (
-  id uuid primary key default gen_random_uuid(),
-  report_id uuid not null references public.daily_reports(id) on delete cascade,
-  waste_item_id uuid not null references public.waste_items(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, waste_item_id)
-);
-
-create table if not exists public.daily_report_safety_items (
-  id uuid primary key default gen_random_uuid(),
-  report_id uuid not null references public.daily_reports(id) on delete cascade,
-  safety_item_id uuid not null references public.safety_items(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, safety_item_id)
 );
 
 create table if not exists public.daily_report_workers (
@@ -126,28 +78,29 @@ create table if not exists public.daily_report_workers (
   unique (report_id, worker_id)
 );
 
-create table if not exists public.daily_report_machines (
+create table if not exists public.daily_report_lease_items (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references public.daily_reports(id) on delete cascade,
-  machine_id uuid not null references public.machines(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, machine_id)
+  lease_item_id uuid not null references public.lease_items(id),
+  count integer not null default 0,
+  created_at timestamptz not null default now()
 );
 
-create table if not exists public.daily_report_vehicles (
+create table if not exists public.daily_report_disposal_items (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references public.daily_reports(id) on delete cascade,
-  vehicle_id uuid not null references public.vehicles(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, vehicle_id)
+  disposal_item_id uuid not null references public.disposal_items(id),
+  ton_count integer not null default 0,
+  truck_count integer not null default 0,
+  created_at timestamptz not null default now()
 );
 
-create table if not exists public.daily_report_partner_companies (
+create table if not exists public.daily_report_transport_items (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references public.daily_reports(id) on delete cascade,
-  partner_company_id uuid not null references public.partner_companies(id),
-  created_at timestamptz not null default now(),
-  unique (report_id, partner_company_id)
+  transport_item_id uuid not null references public.transport_items(id),
+  count integer not null default 0,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists public.report_photos (
@@ -158,9 +111,196 @@ create table if not exists public.report_photos (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.report_edit_logs (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.daily_reports(id) on delete cascade,
+  edited_by uuid not null references auth.users(id),
+  edited_at timestamptz not null default now()
+);
+
 create index if not exists idx_daily_reports_site_id on public.daily_reports(site_id);
 create index if not exists idx_daily_reports_report_date on public.daily_reports(report_date desc);
+create index if not exists idx_daily_report_workers_report_id on public.daily_report_workers(report_id);
+create index if not exists idx_daily_report_lease_items_report_id on public.daily_report_lease_items(report_id);
+create index if not exists idx_daily_report_disposal_items_report_id on public.daily_report_disposal_items(report_id);
+create index if not exists idx_daily_report_transport_items_report_id on public.daily_report_transport_items(report_id);
 create index if not exists idx_report_photos_report_id on public.report_photos(report_id);
+create index if not exists idx_report_edit_logs_report_id on public.report_edit_logs(report_id, edited_at desc);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create or replace function public.is_master_user(target_user uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.app_users
+    where user_id = target_user
+      and is_master = true
+  );
+$$;
+
+create or replace function public.can_edit_report(target_report uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.daily_reports
+    where id = target_report
+      and (created_by = auth.uid() or public.is_master_user())
+  );
+$$;
+
+create or replace function public.save_daily_report(
+  p_report_id uuid,
+  p_site_id uuid,
+  p_report_date date,
+  p_worker_count integer,
+  p_work_shift text,
+  p_contract_type text,
+  p_miscellaneous_costs text,
+  p_other_vehicle_entries jsonb,
+  p_other_workers_note text,
+  p_remarks text,
+  p_progress_status text,
+  p_worker_ids uuid[],
+  p_lease_entries jsonb,
+  p_disposal_entries jsonb,
+  p_transport_entries jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_report_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  if p_report_id is null then
+    insert into public.daily_reports (
+      site_id,
+      report_date,
+      worker_count,
+      work_shift,
+      contract_type,
+      miscellaneous_costs,
+      other_vehicle_entries,
+      other_workers_note,
+      remarks,
+      progress_status,
+      created_by
+    )
+    values (
+      p_site_id,
+      p_report_date,
+      p_worker_count,
+      p_work_shift,
+      p_contract_type,
+      p_miscellaneous_costs,
+      coalesce(p_other_vehicle_entries, '[]'::jsonb),
+      p_other_workers_note,
+      p_remarks,
+      p_progress_status,
+      auth.uid()
+    )
+    returning id into v_report_id;
+  else
+    if not public.can_edit_report(p_report_id) then
+      raise exception 'Not allowed to edit this report';
+    end if;
+
+    update public.daily_reports
+    set
+      site_id = p_site_id,
+      report_date = p_report_date,
+      worker_count = p_worker_count,
+      work_shift = p_work_shift,
+      contract_type = p_contract_type,
+      miscellaneous_costs = p_miscellaneous_costs,
+      other_vehicle_entries = coalesce(p_other_vehicle_entries, '[]'::jsonb),
+      other_workers_note = p_other_workers_note,
+      remarks = p_remarks,
+      progress_status = p_progress_status
+    where id = p_report_id;
+
+    v_report_id := p_report_id;
+  end if;
+
+  delete from public.daily_report_workers where report_id = v_report_id;
+  if coalesce(array_length(p_worker_ids, 1), 0) > 0 then
+    insert into public.daily_report_workers (report_id, worker_id)
+    select v_report_id, worker_id
+    from unnest(p_worker_ids) as worker_id;
+  end if;
+
+  delete from public.daily_report_lease_items where report_id = v_report_id;
+  if coalesce(jsonb_array_length(coalesce(p_lease_entries, '[]'::jsonb)), 0) > 0 then
+    insert into public.daily_report_lease_items (report_id, lease_item_id, count)
+    select
+      v_report_id,
+      (entry->>'lease_item_id')::uuid,
+      (entry->>'count')::integer
+    from jsonb_array_elements(coalesce(p_lease_entries, '[]'::jsonb)) as entry
+    where coalesce((entry->>'lease_item_id')::text, '') <> ''
+      and coalesce((entry->>'count')::integer, 0) > 0;
+  end if;
+
+  delete from public.daily_report_disposal_items where report_id = v_report_id;
+  if coalesce(jsonb_array_length(coalesce(p_disposal_entries, '[]'::jsonb)), 0) > 0 then
+    insert into public.daily_report_disposal_items (report_id, disposal_item_id, ton_count, truck_count)
+    select
+      v_report_id,
+      (entry->>'disposal_item_id')::uuid,
+      coalesce((entry->>'ton_count')::integer, 0),
+      coalesce((entry->>'truck_count')::integer, 0)
+    from jsonb_array_elements(coalesce(p_disposal_entries, '[]'::jsonb)) as entry
+    where coalesce((entry->>'disposal_item_id')::text, '') <> ''
+      and (
+        coalesce((entry->>'ton_count')::integer, 0) > 0
+        or coalesce((entry->>'truck_count')::integer, 0) > 0
+      );
+  end if;
+
+  delete from public.daily_report_transport_items where report_id = v_report_id;
+  if coalesce(jsonb_array_length(coalesce(p_transport_entries, '[]'::jsonb)), 0) > 0 then
+    insert into public.daily_report_transport_items (report_id, transport_item_id, count)
+    select
+      v_report_id,
+      (entry->>'transport_item_id')::uuid,
+      (entry->>'count')::integer
+    from jsonb_array_elements(coalesce(p_transport_entries, '[]'::jsonb)) as entry
+    where coalesce((entry->>'transport_item_id')::text, '') <> ''
+      and coalesce((entry->>'count')::integer, 0) > 0;
+  end if;
+
+  if p_report_id is not null then
+    insert into public.report_edit_logs (report_id, edited_by)
+    values (v_report_id, auth.uid());
+  end if;
+
+  return v_report_id;
+end;
+$$;
 
 drop trigger if exists set_sites_updated_at on public.sites;
 create trigger set_sites_updated_at
@@ -172,58 +312,61 @@ create trigger set_daily_reports_updated_at
 before update on public.daily_reports
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_work_items_updated_at on public.work_items;
-create trigger set_work_items_updated_at
-before update on public.work_items
-for each row execute function public.set_updated_at();
-
-drop trigger if exists set_waste_items_updated_at on public.waste_items;
-create trigger set_waste_items_updated_at
-before update on public.waste_items
-for each row execute function public.set_updated_at();
-
-drop trigger if exists set_safety_items_updated_at on public.safety_items;
-create trigger set_safety_items_updated_at
-before update on public.safety_items
-for each row execute function public.set_updated_at();
-
 drop trigger if exists set_workers_updated_at on public.workers;
 create trigger set_workers_updated_at
 before update on public.workers
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_machines_updated_at on public.machines;
-create trigger set_machines_updated_at
-before update on public.machines
+drop trigger if exists set_lease_items_updated_at on public.lease_items;
+create trigger set_lease_items_updated_at
+before update on public.lease_items
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_vehicles_updated_at on public.vehicles;
-create trigger set_vehicles_updated_at
-before update on public.vehicles
+drop trigger if exists set_disposal_items_updated_at on public.disposal_items;
+create trigger set_disposal_items_updated_at
+before update on public.disposal_items
 for each row execute function public.set_updated_at();
 
-drop trigger if exists set_partner_companies_updated_at on public.partner_companies;
-create trigger set_partner_companies_updated_at
-before update on public.partner_companies
+drop trigger if exists set_transport_items_updated_at on public.transport_items;
+create trigger set_transport_items_updated_at
+before update on public.transport_items
 for each row execute function public.set_updated_at();
 
+alter table public.app_users enable row level security;
 alter table public.sites enable row level security;
 alter table public.daily_reports enable row level security;
-alter table public.work_items enable row level security;
-alter table public.waste_items enable row level security;
-alter table public.safety_items enable row level security;
 alter table public.workers enable row level security;
-alter table public.machines enable row level security;
-alter table public.vehicles enable row level security;
-alter table public.partner_companies enable row level security;
-alter table public.daily_report_work_items enable row level security;
-alter table public.daily_report_waste_items enable row level security;
-alter table public.daily_report_safety_items enable row level security;
+alter table public.lease_items enable row level security;
+alter table public.disposal_items enable row level security;
+alter table public.transport_items enable row level security;
 alter table public.daily_report_workers enable row level security;
-alter table public.daily_report_machines enable row level security;
-alter table public.daily_report_vehicles enable row level security;
-alter table public.daily_report_partner_companies enable row level security;
+alter table public.daily_report_lease_items enable row level security;
+alter table public.daily_report_disposal_items enable row level security;
+alter table public.daily_report_transport_items enable row level security;
 alter table public.report_photos enable row level security;
+alter table public.report_edit_logs enable row level security;
+
+drop policy if exists "authenticated users can read app_users" on public.app_users;
+create policy "authenticated users can read app_users"
+on public.app_users
+for select
+to authenticated
+using (true);
+
+drop policy if exists "users can insert own app_user or masters can insert all" on public.app_users;
+create policy "users can insert own app_user or masters can insert all"
+on public.app_users
+for insert
+to authenticated
+with check (user_id = auth.uid() or public.is_master_user());
+
+drop policy if exists "users can update own app_user or masters can update all" on public.app_users;
+create policy "users can update own app_user or masters can update all"
+on public.app_users
+for update
+to authenticated
+using (user_id = auth.uid() or public.is_master_user())
+with check (user_id = auth.uid() or public.is_master_user());
 
 drop policy if exists "authenticated users can manage sites" on public.sites;
 create policy "authenticated users can manage sites"
@@ -233,37 +376,34 @@ to authenticated
 using (true)
 with check (true);
 
-drop policy if exists "authenticated users can manage daily_reports" on public.daily_reports;
-create policy "authenticated users can manage daily_reports"
+drop policy if exists "authenticated users can read daily_reports" on public.daily_reports;
+create policy "authenticated users can read daily_reports"
 on public.daily_reports
-for all
+for select
 to authenticated
-using (true)
-with check (true);
+using (true);
 
-drop policy if exists "authenticated users can manage work_items" on public.work_items;
-create policy "authenticated users can manage work_items"
-on public.work_items
-for all
+drop policy if exists "authenticated users can insert daily_reports" on public.daily_reports;
+create policy "authenticated users can insert daily_reports"
+on public.daily_reports
+for insert
 to authenticated
-using (true)
-with check (true);
+with check (created_by = auth.uid());
 
-drop policy if exists "authenticated users can manage waste_items" on public.waste_items;
-create policy "authenticated users can manage waste_items"
-on public.waste_items
-for all
+drop policy if exists "owners or masters can update daily_reports" on public.daily_reports;
+create policy "owners or masters can update daily_reports"
+on public.daily_reports
+for update
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(id))
+with check (created_by = auth.uid() or public.is_master_user());
 
-drop policy if exists "authenticated users can manage safety_items" on public.safety_items;
-create policy "authenticated users can manage safety_items"
-on public.safety_items
-for all
+drop policy if exists "owners or masters can delete daily_reports" on public.daily_reports;
+create policy "owners or masters can delete daily_reports"
+on public.daily_reports
+for delete
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(id));
 
 drop policy if exists "authenticated users can manage workers" on public.workers;
 create policy "authenticated users can manage workers"
@@ -273,98 +413,134 @@ to authenticated
 using (true)
 with check (true);
 
-drop policy if exists "authenticated users can manage machines" on public.machines;
-create policy "authenticated users can manage machines"
-on public.machines
+drop policy if exists "authenticated users can manage lease_items" on public.lease_items;
+create policy "authenticated users can manage lease_items"
+on public.lease_items
 for all
 to authenticated
 using (true)
 with check (true);
 
-drop policy if exists "authenticated users can manage vehicles" on public.vehicles;
-create policy "authenticated users can manage vehicles"
-on public.vehicles
+drop policy if exists "authenticated users can manage disposal_items" on public.disposal_items;
+create policy "authenticated users can manage disposal_items"
+on public.disposal_items
 for all
 to authenticated
 using (true)
 with check (true);
 
-drop policy if exists "authenticated users can manage partner_companies" on public.partner_companies;
-create policy "authenticated users can manage partner_companies"
-on public.partner_companies
+drop policy if exists "authenticated users can manage transport_items" on public.transport_items;
+create policy "authenticated users can manage transport_items"
+on public.transport_items
 for all
 to authenticated
 using (true)
 with check (true);
 
-drop policy if exists "authenticated users can manage daily_report_workers" on public.daily_report_workers;
-create policy "authenticated users can manage daily_report_workers"
+drop policy if exists "authenticated users can read daily_report_workers" on public.daily_report_workers;
+create policy "authenticated users can read daily_report_workers"
+on public.daily_report_workers
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage daily_report_workers" on public.daily_report_workers;
+create policy "owners or masters can manage daily_report_workers"
 on public.daily_report_workers
 for all
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
 
-drop policy if exists "authenticated users can manage daily_report_machines" on public.daily_report_machines;
-create policy "authenticated users can manage daily_report_machines"
-on public.daily_report_machines
+drop policy if exists "authenticated users can read daily_report_lease_items" on public.daily_report_lease_items;
+create policy "authenticated users can read daily_report_lease_items"
+on public.daily_report_lease_items
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage daily_report_lease_items" on public.daily_report_lease_items;
+create policy "owners or masters can manage daily_report_lease_items"
+on public.daily_report_lease_items
 for all
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
 
-drop policy if exists "authenticated users can manage daily_report_vehicles" on public.daily_report_vehicles;
-create policy "authenticated users can manage daily_report_vehicles"
-on public.daily_report_vehicles
+drop policy if exists "authenticated users can read daily_report_disposal_items" on public.daily_report_disposal_items;
+create policy "authenticated users can read daily_report_disposal_items"
+on public.daily_report_disposal_items
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage daily_report_disposal_items" on public.daily_report_disposal_items;
+create policy "owners or masters can manage daily_report_disposal_items"
+on public.daily_report_disposal_items
 for all
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
 
-drop policy if exists "authenticated users can manage daily_report_partner_companies" on public.daily_report_partner_companies;
-create policy "authenticated users can manage daily_report_partner_companies"
-on public.daily_report_partner_companies
+drop policy if exists "authenticated users can read daily_report_transport_items" on public.daily_report_transport_items;
+create policy "authenticated users can read daily_report_transport_items"
+on public.daily_report_transport_items
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage daily_report_transport_items" on public.daily_report_transport_items;
+create policy "owners or masters can manage daily_report_transport_items"
+on public.daily_report_transport_items
 for all
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
 
-drop policy if exists "authenticated users can manage daily_report_work_items" on public.daily_report_work_items;
-create policy "authenticated users can manage daily_report_work_items"
-on public.daily_report_work_items
-for all
+drop policy if exists "authenticated users can read report_photos" on public.report_photos;
+create policy "authenticated users can read report_photos"
+on public.report_photos
+for select
 to authenticated
-using (true)
-with check (true);
+using (true);
 
-drop policy if exists "authenticated users can manage daily_report_waste_items" on public.daily_report_waste_items;
-create policy "authenticated users can manage daily_report_waste_items"
-on public.daily_report_waste_items
-for all
-to authenticated
-using (true)
-with check (true);
-
-drop policy if exists "authenticated users can manage daily_report_safety_items" on public.daily_report_safety_items;
-create policy "authenticated users can manage daily_report_safety_items"
-on public.daily_report_safety_items
-for all
-to authenticated
-using (true)
-with check (true);
-
-drop policy if exists "authenticated users can manage report_photos" on public.report_photos;
-create policy "authenticated users can manage report_photos"
+drop policy if exists "owners or masters can manage report_photos" on public.report_photos;
+create policy "owners or masters can manage report_photos"
 on public.report_photos
 for all
 to authenticated
-using (true)
-with check (true);
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
+
+drop policy if exists "authenticated users can read report_edit_logs" on public.report_edit_logs;
+create policy "authenticated users can read report_edit_logs"
+on public.report_edit_logs
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage report_edit_logs" on public.report_edit_logs;
+create policy "owners or masters can manage report_edit_logs"
+on public.report_edit_logs
+for all
+to authenticated
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
 
 comment on table public.sites is 'MVPでは単一会社向け。将来は company_id を追加し、RLS を company_id ベースに切り替える。';
 comment on table public.daily_reports is 'MVPでは単一会社向け。将来は company_id を追加し、created_by と合わせてテナント分離する。';
-comment on table public.workers is '固定マスタ種別として追加。将来 company_id や worker_code などを付与しやすい形。';
-comment on table public.machines is '固定マスタ種別として追加。将来機種、号機、保有区分などを付与しやすい形。';
-comment on table public.vehicles is '固定マスタ種別として追加。将来ナンバー、車種、積載量などを付与しやすい形。';
-comment on table public.partner_companies is '固定マスタ種別として追加。将来担当者情報や請負区分を付与しやすい形。';
+comment on table public.app_users is 'is_master=true のユーザーは日報を横断して編集可能。';
+comment on table public.workers is '作業員マスタ。group_label で会社や所属ラベルを分ける。';
+comment on table public.lease_items is 'リース関係マスタ。ニシコンや城東リースなどを管理する。';
+comment on table public.disposal_items is 'ゴミ処分マスタ。エイシンやRSKなどを管理する。';
+comment on table public.transport_items is '車両・運搬マスタ。2TCや乗用車などを管理する。';
 comment on column public.report_photos.image_path is '外部ストレージまたは自社サーバーに保存した画像URLを格納する。';
+
+-- マスターアカウント設定例
+-- Authentication > Users で確認した user_id に差し替えて実行する
+--
+-- insert into public.app_users (user_id, is_master)
+-- values ('REPLACE_WITH_AUTH_USER_ID', true)
+-- on conflict (user_id)
+-- do update
+-- set is_master = excluded.is_master;

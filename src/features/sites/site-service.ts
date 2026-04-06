@@ -30,3 +30,10 @@ export async function archiveSite(id: string) {
     throw error;
   }
 }
+
+export async function activateSite(id: string) {
+  const { error } = await supabase.from("sites").update({ is_active: true }).eq("id", id);
+  if (error) {
+    throw error;
+  }
+}

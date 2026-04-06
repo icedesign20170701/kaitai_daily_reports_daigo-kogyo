@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { MapPinned, Pause, Play, Plus, Route } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
+import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,9 +21,29 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { archiveSite, listSites, upsertSite } from "@/features/sites/site-service";
+import { activateSite, archiveSite, listSites, upsertSite } from "@/features/sites/site-service";
 import type { Site } from "@/types/database";
+
+const companyAddress = "大阪府東大阪市高井田西３丁目６−３";
+
+function normalizeMapAddress(value: string) {
+  return value
+    .normalize("NFKC")
+    .replaceAll("丁目", "-")
+    .replaceAll("番地", "-")
+    .replaceAll("番", "-")
+    .replaceAll("号", "")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+}
+
+function getMapLink(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizeMapAddress(address))}`;
+}
+
+function getDirectionsLink(destination: string) {
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(normalizeMapAddress(companyAddress))}&destination=${encodeURIComponent(normalizeMapAddress(destination))}&travelmode=driving`;
+}
 
 const siteSchema = z.object({
   name: z.string().min(1, "現場名を入力してください"),
@@ -107,6 +128,16 @@ export function SitesPage() {
     }
   };
 
+  const handleActivate = async (siteId: string) => {
+    try {
+      await activateSite(siteId);
+      toast.success("現場を稼働中に戻しました");
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "稼働への切り替えに失敗しました");
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -151,10 +182,7 @@ export function SitesPage() {
       />
 
       {loading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-20" />
-          <Skeleton className="h-20" />
-        </div>
+        <LoadingState message="現場一覧を読み込んでいます..." />
       ) : error ? (
         <ErrorState message={error} />
       ) : sites.length === 0 ? (
@@ -164,12 +192,39 @@ export function SitesPage() {
           {sites.map((site) => (
             <Card key={site.id}>
               <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold">{site.name}</p>
-                    <Badge variant={site.is_active ? "default" : "outline"}>{site.is_active ? "稼働中" : "停止"}</Badge>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 break-words font-bold">{site.name}</p>
+                    <Badge
+                      className={site.is_active ? "shrink-0 whitespace-nowrap bg-emerald-600 text-white" : "shrink-0 whitespace-nowrap bg-destructive text-destructive-foreground"}
+                    >
+                      {site.is_active ? "稼働中" : "停止中"}
+                    </Badge>
                   </div>
-                  <p className="text-sm text-muted-foreground">{site.address || "住所未登録"}</p>
+                  {site.address ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <a
+                        href={getMapLink(site.address)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-sky-700 underline underline-offset-2"
+                      >
+                        {site.address}
+                        <MapPinned className="h-3.5 w-3.5" />
+                      </a>
+                      <a
+                        href={getDirectionsLink(site.address)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground underline underline-offset-2 transition hover:text-foreground"
+                      >
+                        <Route className="h-3.5 w-3.5" />
+                        会社からの経路
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">住所未登録</p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => openEdit(site)}>
@@ -177,10 +232,15 @@ export function SitesPage() {
                   </Button>
                   {site.is_active ? (
                     <Button variant="destructive" onClick={() => void handleArchive(site.id)}>
-                      <Trash2 className="h-4 w-4" />
+                      <Pause className="h-4 w-4" />
                       停止
                     </Button>
-                  ) : null}
+                  ) : (
+                    <Button className="bg-emerald-600 text-white hover:bg-emerald-500" onClick={() => void handleActivate(site.id)}>
+                      <Play className="h-4 w-4" />
+                      稼働
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

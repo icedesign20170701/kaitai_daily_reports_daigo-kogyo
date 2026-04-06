@@ -29,6 +29,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let mounted = true;
+    const loadingTimeout = window.setTimeout(() => {
+      if (!mounted) return;
+      setLoading(false);
+    }, 8000);
 
     const loadAppUser = async (currentUser: User | null) => {
       if (!currentUser) {
@@ -36,59 +40,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("app_users")
-        .select("user_id, display_name, is_master, created_at")
-        .eq("user_id", currentUser.id)
-        .maybeSingle();
-
-      if (error) {
-        setAppUser(null);
-        return;
-      }
-
-      if (!data) {
-        const { data: inserted } = await supabase
+      try {
+        const { data, error } = await supabase
           .from("app_users")
-          .insert({
-            user_id: currentUser.id,
-            display_name: null,
-            is_master: false,
-          })
           .select("user_id, display_name, is_master, created_at")
+          .eq("user_id", currentUser.id)
           .maybeSingle();
 
-        setAppUser((inserted ?? null) as AppUser | null);
-        return;
-      }
+        if (error) {
+          setAppUser(null);
+          return;
+        }
 
-      setAppUser((data ?? null) as AppUser | null);
+        if (!data) {
+          const { data: inserted } = await supabase
+            .from("app_users")
+            .insert({
+              user_id: currentUser.id,
+              display_name: null,
+              is_master: false,
+            })
+            .select("user_id, display_name, is_master, created_at")
+            .maybeSingle();
+
+          if (!mounted) {
+            return;
+          }
+          setAppUser((inserted ?? null) as AppUser | null);
+          return;
+        }
+
+        if (!mounted) {
+          return;
+        }
+        setAppUser((data ?? null) as AppUser | null);
+      } catch {
+        setAppUser(null);
+      }
     };
 
     const bootstrap = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) {
-        return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) {
+          return;
+        }
+        setSession(data.session);
+        setUser(data.session?.user ?? null);
+        await loadAppUser(data.session?.user ?? null);
+      } catch {
+        if (!mounted) {
+          return;
+        }
+        setSession(null);
+        setUser(null);
+        setAppUser(null);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      await loadAppUser(data.session?.user ?? null);
-      setLoading(false);
     };
 
-    bootstrap();
+    void bootstrap();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-      await loadAppUser(nextSession?.user ?? null);
-      setLoading(false);
+      try {
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
+        await loadAppUser(nextSession?.user ?? null);
+      } catch {
+        setAppUser(null);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
     });
 
     return () => {
       mounted = false;
+      window.clearTimeout(loadingTimeout);
       subscription.unsubscribe();
     };
   }, []);

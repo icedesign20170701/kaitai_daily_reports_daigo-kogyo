@@ -30,6 +30,18 @@ cp .env.example .env
 npm run dev
 ```
 
+## Vercel デプロイ時の注意
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_FILE_UPLOAD_URL`
+- `VITE_FILE_DELETE_URL` 任意
+- `VITE_FILE_API_TOKEN` 任意
+
+を Vercel の Environment Variables に設定してください。
+
+このリポジトリには [vercel.json](/Users/yuma/Documents/develop/kaitai_daily_reports/vercel.json) を入れてあり、SPA の `/login` や `/reports/...` へ直接アクセスしても `index.html` に rewrite される前提です。
+
 ## 画面構成
 
 - `/login`

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-context";
 import { signInWithPassword } from "@/features/auth/auth-service";
+import { supabaseConfigError } from "@/lib/supabase";
 
 const loginSchema = z.object({
   email: z.string().email("正しいメールアドレスを入力してください"),
@@ -61,6 +62,11 @@ export function LoginPage() {
           <CardDescription>メールアドレスとパスワードでサインインします。</CardDescription>
         </CardHeader>
         <CardContent>
+          {supabaseConfigError ? (
+            <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-destructive">
+              Vercel の環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を設定してください。
+            </div>
+          ) : null}
           <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2">
               <Label htmlFor="email">メールアドレス</Label>

@@ -18,7 +18,7 @@ import { exportReportsCsv } from "@/features/reports/report-export";
 import { useAuth } from "@/features/auth/auth-context";
 import { listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
-import { cn, formatDate, toDateInputValue, withTimeout } from "@/lib/utils";
+import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
 import type { DailyReport, Site } from "@/types/database";
 
 type ReportListRow = DailyReport & { site: Site | null };
@@ -141,8 +141,8 @@ export function ReportsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await withTimeout(
-        listReports({
+      const data = await withSupabaseRecovery(
+        () => listReports({
           from: filters.from || undefined,
           to: filters.to || undefined,
           siteId: filters.siteId === "all" ? undefined : filters.siteId,
@@ -159,7 +159,7 @@ export function ReportsPage() {
   }, [filters]);
 
   useEffect(() => {
-    void withTimeout(listSites(true), 8000).then(setSites).catch(() => undefined);
+    void withSupabaseRecovery(() => listSites(true), 8000).then(setSites).catch(() => undefined);
   }, []);
 
   useEffect(() => {

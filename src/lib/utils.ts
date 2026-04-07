@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { resetSupabaseClient, supabase } from "@/lib/supabase";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -51,5 +52,45 @@ export async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number,
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
     }
+  }
+}
+
+function isRecoverableLoadError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("timeout") ||
+    message.includes("タイムアウト") ||
+    message.includes("fetch") ||
+    message.includes("network") ||
+    message.includes("load failed") ||
+    message.includes("failed to fetch")
+  );
+}
+
+export async function withSupabaseRecovery<T>(
+  loader: () => PromiseLike<T>,
+  timeoutMs: number,
+  message = "読み込みがタイムアウトしました",
+): Promise<T> {
+  try {
+    return await withTimeout(Promise.resolve(loader()), timeoutMs, message);
+  } catch (error) {
+    if (!isRecoverableLoadError(error)) {
+      throw error;
+    }
+
+    resetSupabaseClient();
+
+    try {
+      await supabase.auth.getSession();
+    } catch {
+      // Session restore is best-effort. A second failure will be surfaced by the retried loader.
+    }
+
+    return withTimeout(Promise.resolve(loader()), timeoutMs, message);
   }
 }

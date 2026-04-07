@@ -15,7 +15,7 @@ import { deletePhoto, deleteReport, getReportDetail, saveReport } from "@/featur
 import { listSites } from "@/features/sites/site-service";
 import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
-import { cn, formatDate, withTimeout } from "@/lib/utils";
+import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
 import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, Site } from "@/types/database";
 
 function DetailSection({ title, value, emptyLabel = "未入力" }: { title: string; value: string | null | undefined; emptyLabel?: string }) {
@@ -92,8 +92,8 @@ export function ReportDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [detail, siteData, workerData, leaseData, disposalData, transportData] = await withTimeout(
-        Promise.all([
+      const [detail, siteData, workerData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+        () => Promise.all([
           getReportDetail(id),
           listSites(false),
           listMasterItems("worker", false),
@@ -162,8 +162,8 @@ export function ReportDetailPage() {
 
   const reload = async () => {
     if (!id) return;
-    const detail = await withTimeout(
-      getReportDetail(id),
+    const detail = await withSupabaseRecovery(
+      () => getReportDetail(id),
       8000,
       "最新の日報データ取得がタイムアウトしました。再度お試しください。",
     );

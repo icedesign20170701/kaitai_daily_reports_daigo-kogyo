@@ -22,7 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { activateSite, archiveSite, listSites, upsertSite } from "@/features/sites/site-service";
-import { withTimeout } from "@/lib/utils";
+import { withSupabaseRecovery } from "@/lib/utils";
 import type { Site } from "@/types/database";
 
 const companyAddress = "大阪府東大阪市高井田西３丁目６−３";
@@ -74,8 +74,8 @@ export function SitesPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await withTimeout(
-        listSites(true),
+      const data = await withSupabaseRecovery(
+        () => listSites(true),
         10000,
         "現場一覧の読み込みがタイムアウトしました。再度お試しください。",
       );

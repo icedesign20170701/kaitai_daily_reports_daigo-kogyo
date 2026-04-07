@@ -10,7 +10,7 @@ import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
 import { saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
-import { withTimeout } from "@/lib/utils";
+import { withSupabaseRecovery } from "@/lib/utils";
 import type { MasterItem, Site } from "@/types/database";
 
 export function ReportFormPage() {
@@ -29,8 +29,8 @@ export function ReportFormPage() {
     setLoading(true);
     setError(null);
     try {
-      const [siteData, workerData, leaseData, disposalData, transportData] = await withTimeout(
-        Promise.all([
+      const [siteData, workerData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+        () => Promise.all([
           listSites(false),
           listMasterItems("worker", false),
           listMasterItems("lease", false),

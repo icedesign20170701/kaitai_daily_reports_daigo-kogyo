@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-context";
 import { supabase } from "@/lib/supabase";
-import { cn, withTimeout } from "@/lib/utils";
+import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { AppUser } from "@/types/database";
 
 const userSchema = z.object({
@@ -55,8 +55,8 @@ export function UserAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: nextError } = await withTimeout(
-        supabase.from("app_users").select("*").order("created_at", { ascending: true }),
+      const { data, error: nextError } = await withSupabaseRecovery(
+        () => supabase.from("app_users").select("*").order("created_at", { ascending: true }),
         10000,
         "アカウント一覧の読み込みがタイムアウトしました。再度お試しください。",
       );

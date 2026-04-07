@@ -40,7 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { archiveMasterItem, listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
-import { cn, withTimeout } from "@/lib/utils";
+import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { MasterItem, MasterItemType } from "@/types/database";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -116,8 +116,8 @@ export function MastersPage() {
     }
     setError(null);
     try {
-      const data = await withTimeout(
-        listMasterItems(masterType, false),
+      const data = await withSupabaseRecovery(
+        () => listMasterItems(masterType, false),
         10000,
         `${itemLabel || "マスタ"}の読み込みがタイムアウトしました。再度お試しください。`,
       );

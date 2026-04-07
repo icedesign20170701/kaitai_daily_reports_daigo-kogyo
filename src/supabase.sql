@@ -4,8 +4,12 @@ create table if not exists public.app_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
   is_master boolean not null default false,
+  sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table public.app_users
+add column if not exists sort_order integer not null default 0;
 
 create table if not exists public.sites (
   id uuid primary key default gen_random_uuid(),

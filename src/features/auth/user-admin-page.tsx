@@ -1,5 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
-import { Shield, UserCog } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { ArrowDown, ArrowUp, GripVertical, Shield, UserCog } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,6 +34,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-context";
+import { listAppUsers, reorderAppUsers } from "@/features/auth/auth-service";
 import { supabase } from "@/lib/supabase";
 import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { AppUser } from "@/types/database";
@@ -42,6 +61,11 @@ export function UserAdminPage() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [open, setOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 14 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
@@ -55,15 +79,12 @@ export function UserAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: nextError } = await withSupabaseRecovery(
-        () => supabase.from("app_users").select("*").order("created_at", { ascending: true }),
+      const data = await withSupabaseRecovery(
+        () => listAppUsers(),
         10000,
         "アカウント一覧の読み込みがタイムアウトしました。再度お試しください。",
       );
-      if (nextError) {
-        throw nextError;
-      }
-      setUsers((data ?? []) as AppUser[]);
+      setUsers(data as AppUser[]);
     } catch (nextError) {
       setError(getErrorMessage(nextError, "アカウント一覧の取得に失敗しました"));
     } finally {
@@ -129,6 +150,7 @@ export function UserAdminPage() {
         .update({
           display_name: values.display_name,
           is_master: values.is_master,
+          sort_order: editingUser.sort_order,
         })
         .eq("user_id", editingUser.user_id);
 
@@ -146,6 +168,111 @@ export function UserAdminPage() {
       setSaving(false);
     }
   });
+
+  const persistOrder = async (nextUsers: AppUser[]) => {
+    const normalizedUsers = nextUsers.map((currentUser, index) => ({ ...currentUser, sort_order: index }));
+    setUsers(normalizedUsers);
+    try {
+      await reorderAppUsers(normalizedUsers);
+      toast.success("表示順を更新しました");
+    } catch (nextError) {
+      toast.error(getErrorMessage(nextError, "表示順の更新に失敗しました"));
+      await load();
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const currentIndex = users.findIndex((currentUser) => currentUser.user_id === active.id);
+    const targetIndex = users.findIndex((currentUser) => currentUser.user_id === over.id);
+    if (currentIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    await persistOrder(arrayMove(users, currentIndex, targetIndex));
+  };
+
+  const moveByArrow = async (userId: string, direction: -1 | 1) => {
+    const currentIndex = users.findIndex((currentUser) => currentUser.user_id === userId);
+    const targetIndex = currentIndex + direction;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= users.length) {
+      return;
+    }
+
+    await persistOrder(arrayMove(users, currentIndex, targetIndex));
+  };
+
+  function SortableUserCard({ currentUser }: { currentUser: AppUser }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+      id: currentUser.user_id,
+    });
+    const index = users.findIndex((item) => item.user_id === currentUser.user_id);
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={{
+          transform: CSS.Transform.toString(transform),
+          transition,
+        }}
+        className={cn(isDragging && "opacity-60")}
+      >
+        <Card className={cn(isDragging && "shadow-lg")}>
+          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={cn(
+                    "touch-target hidden items-center justify-center cursor-grab rounded-lg border border-transparent p-1 text-muted-foreground transition md:inline-flex",
+                    "hover:scale-105 hover:border-border hover:bg-accent hover:text-foreground",
+                    "active:cursor-grabbing active:scale-95 active:bg-primary/10",
+                    isDragging && "cursor-grabbing border-border bg-accent text-foreground",
+                  )}
+                  aria-label={`${currentUser.display_name || "未設定"}を並び替え`}
+                  title="ドラッグして並び替え"
+                  {...attributes}
+                  {...listeners}
+                >
+                  <GripVertical className="h-4 w-4" />
+                </button>
+                <p className="font-bold">{currentUser.display_name || "未設定"}</p>
+                <Badge variant={currentUser.is_master ? "default" : "outline"}>{currentUser.is_master ? "マスター" : "一般"}</Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">{currentUser.user_id}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="grid grid-cols-3 gap-2 md:hidden">
+                <Button variant="outline" size="icon" className="w-full" onClick={() => void moveByArrow(currentUser.user_id, -1)} disabled={index <= 0}>
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="w-full"
+                  onClick={() => void moveByArrow(currentUser.user_id, 1)}
+                  disabled={index === -1 || index >= users.length - 1}
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" className="w-full" onClick={() => openEdit(currentUser)}>
+                  編集
+                </Button>
+              </div>
+              <Button variant="outline" className="hidden w-full sm:w-auto md:inline-flex" onClick={() => openEdit(currentUser)}>
+                <UserCog className="h-4 w-4" />
+                編集
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!isMaster) {
     return (
@@ -165,26 +292,22 @@ export function UserAdminPage() {
         <ErrorState message={error} />
       ) : users.length === 0 ? (
         <EmptyState title="アカウント情報がありません" description="各ユーザーが一度ログインすると一覧へ表示されます。" />
-      ) : (
+      ) : open ? (
         <div className="grid gap-3">
-          {users.map((user) => (
-            <Card key={user.user_id}>
-              <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-bold">{user.display_name || "未設定"}</p>
-                    <Badge variant={user.is_master ? "default" : "outline"}>{user.is_master ? "マスター" : "一般"}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">{user.user_id}</p>
-                </div>
-                <Button variant="outline" onClick={() => openEdit(user)}>
-                  <UserCog className="h-4 w-4" />
-                  編集
-                </Button>
-              </CardContent>
-            </Card>
+          {users.map((currentUser) => (
+            <SortableUserCard key={currentUser.user_id} currentUser={currentUser} />
           ))}
         </div>
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)}>
+          <SortableContext items={users.map((currentUser) => currentUser.user_id)} strategy={verticalListSortingStrategy}>
+            <div className="grid gap-3">
+              {users.map((currentUser) => (
+                <SortableUserCard key={currentUser.user_id} currentUser={currentUser} />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <div className="mt-4">

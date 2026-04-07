@@ -66,6 +66,7 @@ export type AppUser = {
   user_id: Id;
   display_name: string | null;
   is_master: boolean;
+  sort_order: number;
   created_at: string;
 };
 

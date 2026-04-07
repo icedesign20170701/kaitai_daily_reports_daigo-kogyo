@@ -28,8 +28,8 @@ export async function listAppUsers() {
 
   const { data, error } = await supabase
     .from("app_users")
-    .select("user_id, display_name, is_master, created_at")
-    .order("display_name", { ascending: true, nullsFirst: false })
+    .select("user_id, display_name, is_master, sort_order, created_at")
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -37,4 +37,18 @@ export async function listAppUsers() {
   }
 
   return (data ?? []) as AppUser[];
+}
+
+export async function reorderAppUsers(users: AppUser[]) {
+  const updates = users.map((user, index) => ({
+    user_id: user.user_id,
+    display_name: user.display_name,
+    is_master: user.is_master,
+    sort_order: index,
+  }));
+
+  const { error } = await supabase.from("app_users").upsert(updates, { onConflict: "user_id" });
+  if (error) {
+    throw error;
+  }
 }

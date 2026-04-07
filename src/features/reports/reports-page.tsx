@@ -16,10 +16,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { exportReportsCsv } from "@/features/reports/report-export";
 import { useAuth } from "@/features/auth/auth-context";
+import { listAppUsers } from "@/features/auth/auth-service";
 import { listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
-import type { DailyReport, Site } from "@/types/database";
+import type { AppUser, DailyReport, Site } from "@/types/database";
 
 type ReportListRow = DailyReport & { site: Site | null };
 
@@ -129,12 +130,14 @@ export function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     from: toDateInputValue(startOfMonth(new Date())),
     to: toDateInputValue(endOfMonth(new Date())),
     siteId: "all",
+    createdBy: "all",
   });
 
   const loadReports = useCallback(async () => {
@@ -146,6 +149,7 @@ export function ReportsPage() {
           from: filters.from || undefined,
           to: filters.to || undefined,
           siteId: filters.siteId === "all" ? undefined : filters.siteId,
+          createdBy: filters.createdBy === "all" ? undefined : filters.createdBy,
         }),
         12000,
         "日報一覧の読み込みがタイムアウトしました。再度お試しください。",
@@ -160,6 +164,7 @@ export function ReportsPage() {
 
   useEffect(() => {
     void withSupabaseRecovery(() => listSites(true), 8000).then(setSites).catch(() => undefined);
+    void withSupabaseRecovery(() => listAppUsers(), 8000).then(setAppUsers).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -223,7 +228,7 @@ export function ReportsPage() {
 
   const filterSummary = `${formatDate(filters.from)}〜${formatDate(filters.to)} / ${
     filters.siteId === "all" ? "すべての現場" : sites.find((site) => site.id === filters.siteId)?.name ?? "現場未選択"
-  }`;
+  } / ${filters.createdBy === "all" ? "全員" : appUsers.find((item) => item.user_id === filters.createdBy)?.display_name ?? "未設定"}`;
   const greetingName = appUser?.display_name || user?.email || "ユーザー";
 
   const handleExportCsv = async () => {
@@ -318,7 +323,7 @@ export function ReportsPage() {
             )}
           >
             <div className="min-h-0">
-            <div className="grid gap-4 rounded-2xl border bg-background p-4 md:grid-cols-[1fr_1fr_1.2fr]">
+            <div className="grid gap-4 rounded-2xl border bg-background p-4 md:grid-cols-[1fr_1fr_1.1fr_1.1fr]">
               <DateFilterField
                 id="filter-from"
                 label="開始日"
@@ -343,6 +348,24 @@ export function ReportsPage() {
                     {sites.map((site) => (
                       <option key={site.id} value={site.id}>
                         {site.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+                </div>
+              </div>
+              <div className="min-w-0 space-y-2">
+                <Label>記入者</Label>
+                <div className="relative">
+                  <select
+                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                    value={filters.createdBy}
+                    onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
+                  >
+                    <option value="all">全員</option>
+                    {appUsers.map((item) => (
+                      <option key={item.user_id} value={item.user_id}>
+                        {item.display_name || "未設定"}
                       </option>
                     ))}
                   </select>

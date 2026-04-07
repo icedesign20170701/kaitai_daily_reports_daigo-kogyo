@@ -117,4 +117,5 @@ export type ReportListFilters = {
   from?: string;
   to?: string;
   siteId?: string;
+  createdBy?: string;
 };

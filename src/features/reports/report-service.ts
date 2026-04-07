@@ -56,6 +56,9 @@ export async function listReports(filters: ReportListFilters = {}) {
   if (filters.siteId) {
     query = query.eq("site_id", filters.siteId);
   }
+  if (filters.createdBy) {
+    query = query.eq("created_by", filters.createdBy);
+  }
 
   const { data, error } = await query;
   if (error) {

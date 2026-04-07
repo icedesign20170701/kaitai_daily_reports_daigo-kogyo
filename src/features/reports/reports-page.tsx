@@ -327,7 +327,7 @@ export function ReportsPage() {
       </Card>
 
       {loading ? (
-        <LoadingState message="日報一覧を読み込んでいます..." />
+        <LoadingState message="日報一覧を読み込んでいます..." showProgress expectedDurationMs={6000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : reports.length === 0 ? (

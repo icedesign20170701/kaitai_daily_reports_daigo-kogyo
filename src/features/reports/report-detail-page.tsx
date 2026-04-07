@@ -216,7 +216,7 @@ export function ReportDetailPage() {
       />
 
       {loading ? (
-        <LoadingState message="日報データを読み込んでいます..." />
+        <LoadingState message="日報データを読み込んでいます..." showProgress expectedDurationMs={5000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : !report ? (

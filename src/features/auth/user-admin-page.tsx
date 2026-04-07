@@ -127,7 +127,7 @@ export function UserAdminPage() {
       <PageHeader title="アカウント管理" description="マスターアカウントは全ユーザーの表示名と権限を編集できます。" />
 
       {loading ? (
-        <LoadingState message="アカウント一覧を読み込んでいます..." />
+        <LoadingState message="アカウント一覧を読み込んでいます..." showProgress expectedDurationMs={5000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : users.length === 0 ? (

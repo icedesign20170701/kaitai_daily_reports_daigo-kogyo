@@ -439,7 +439,7 @@ export function MastersPage() {
       </div>
 
       {loading ? (
-        <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} />
+        <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} showProgress expectedDurationMs={5000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (

@@ -72,7 +72,7 @@ export function ReportFormPage() {
     <PageShell>
       <PageHeader title="日報入力" description="" />
       {loading ? (
-        <LoadingState message="日報入力に必要なデータを読み込んでいます..." />
+        <LoadingState message="日報入力に必要なデータを読み込んでいます..." showProgress expectedDurationMs={5000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : (

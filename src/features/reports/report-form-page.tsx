@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
@@ -10,6 +10,7 @@ import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
 import { saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
+import { withTimeout } from "@/lib/utils";
 import type { MasterItem, Site } from "@/types/database";
 
 export function ReportFormPage() {
@@ -24,32 +25,61 @@ export function ReportFormPage() {
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [siteData, workerData, leaseData, disposalData, transportData] = await Promise.all([
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [siteData, workerData, leaseData, disposalData, transportData] = await withTimeout(
+        Promise.all([
           listSites(false),
           listMasterItems("worker", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
-        ]);
-        setSites(siteData);
-        setWorkers(workerData);
-        setLeaseItems(leaseData);
-        setDisposalItems(disposalData);
-        setTransportItems(transportData);
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : "初期データの取得に失敗しました");
-      } finally {
-        setLoading(false);
+        ]),
+        12000,
+        "日報入力の初期データ読み込みがタイムアウトしました。再度お試しください。",
+      );
+      setSites(siteData);
+      setWorkers(workerData);
+      setLeaseItems(leaseData);
+      setDisposalItems(disposalData);
+      setTransportItems(transportData);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "初期データの取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void load();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
       }
     };
 
-    void load();
-  }, []);
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [load, loading]);
 
   const handleSubmit = async (values: Parameters<typeof saveReport>[0], files: File[]) => {
     if (!user) {

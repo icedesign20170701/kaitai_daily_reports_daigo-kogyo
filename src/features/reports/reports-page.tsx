@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ import { exportReportsCsv } from "@/features/reports/report-export";
 import { useAuth } from "@/features/auth/auth-context";
 import { listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
-import { cn, formatDate, toDateInputValue } from "@/lib/utils";
+import { cn, formatDate, toDateInputValue, withTimeout } from "@/lib/utils";
 import type { DailyReport, Site } from "@/types/database";
 
 type ReportListRow = DailyReport & { site: Site | null };
@@ -137,8 +137,29 @@ export function ReportsPage() {
     siteId: "all",
   });
 
+  const loadReports = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await withTimeout(
+        listReports({
+          from: filters.from || undefined,
+          to: filters.to || undefined,
+          siteId: filters.siteId === "all" ? undefined : filters.siteId,
+        }),
+        12000,
+        "日報一覧の読み込みがタイムアウトしました。再度お試しください。",
+      );
+      setReports(data);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "日報一覧の取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
+
   useEffect(() => {
-    void listSites(true).then(setSites).catch(() => undefined);
+    void withTimeout(listSites(true), 8000).then(setSites).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -150,25 +171,33 @@ export function ReportsPage() {
   }, [currentMonth]);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await listReports({
-          from: filters.from || undefined,
-          to: filters.to || undefined,
-          siteId: filters.siteId === "all" ? undefined : filters.siteId,
-        });
-        setReports(data);
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : "日報一覧の取得に失敗しました");
-      } finally {
-        setLoading(false);
+    void loadReports();
+  }, [loadReports]);
+
+  useEffect(() => {
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void loadReports();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
       }
     };
 
-    void load();
-  }, [filters]);
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadReports, loading]);
 
   const summary = useMemo(() => {
     const totalWorkers = reports.reduce((sum, report) => sum + report.worker_count, 0);

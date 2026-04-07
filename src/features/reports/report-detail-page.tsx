@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import { deletePhoto, deleteReport, getReportDetail, saveReport } from "@/featur
 import { listSites } from "@/features/sites/site-service";
 import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, withTimeout } from "@/lib/utils";
 import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, Site } from "@/types/database";
 
 function DetailSection({ title, value, emptyLabel = "未入力" }: { title: string; value: string | null | undefined; emptyLabel?: string }) {
@@ -84,36 +84,67 @@ export function ReportDetailPage() {
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
 
-  useEffect(() => {
-    if (!id) return;
+  const load = useCallback(async () => {
+    if (!id) {
+      return;
+    }
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [detail, siteData, workerData, leaseData, disposalData, transportData] = await Promise.all([
+    setLoading(true);
+    setError(null);
+    try {
+      const [detail, siteData, workerData, leaseData, disposalData, transportData] = await withTimeout(
+        Promise.all([
           getReportDetail(id),
           listSites(false),
           listMasterItems("worker", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
-        ]);
-        setReport(detail);
-        setSites(siteData);
-        setWorkers(workerData);
-        setLeaseItems(leaseData);
-        setDisposalItems(disposalData);
-        setTransportItems(transportData);
-      } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : "日報の取得に失敗しました");
-      } finally {
-        setLoading(false);
+        ]),
+        12000,
+        "日報詳細の読み込みがタイムアウトしました。再度お試しください。",
+      );
+      setReport(detail);
+      setSites(siteData);
+      setWorkers(workerData);
+      setLeaseItems(leaseData);
+      setDisposalItems(disposalData);
+      setTransportItems(transportData);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "日報の取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void load();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
       }
     };
 
-    void load();
-  }, [id]);
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [load, loading]);
 
   useEffect(() => {
     if (!user) {
@@ -131,7 +162,11 @@ export function ReportDetailPage() {
 
   const reload = async () => {
     if (!id) return;
-    const detail = await getReportDetail(id);
+    const detail = await withTimeout(
+      getReportDetail(id),
+      8000,
+      "最新の日報データ取得がタイムアウトしました。再度お試しください。",
+    );
     setReport(detail);
   };
 

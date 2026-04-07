@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Shield, UserCog } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-context";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
+import { cn, withTimeout } from "@/lib/utils";
 import type { AppUser } from "@/types/database";
 
 const userSchema = z.object({
@@ -51,11 +51,15 @@ export function UserAdminPage() {
     },
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: nextError } = await supabase.from("app_users").select("*").order("created_at", { ascending: true });
+      const { data, error: nextError } = await withTimeout(
+        supabase.from("app_users").select("*").order("created_at", { ascending: true }),
+        10000,
+        "アカウント一覧の読み込みがタイムアウトしました。再度お試しください。",
+      );
       if (nextError) {
         throw nextError;
       }
@@ -65,7 +69,7 @@ export function UserAdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!isMaster) {
@@ -73,7 +77,36 @@ export function UserAdminPage() {
       return;
     }
     void load();
-  }, [isMaster]);
+  }, [isMaster, load]);
+
+  useEffect(() => {
+    if (!isMaster) {
+      return;
+    }
+
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void load();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
+      }
+    };
+
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isMaster, load, loading]);
 
   const openEdit = (user: AppUser) => {
     setEditingUser(user);

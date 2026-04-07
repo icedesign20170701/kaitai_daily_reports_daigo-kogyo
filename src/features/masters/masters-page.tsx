@@ -40,7 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { archiveMasterItem, listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
-import { cn } from "@/lib/utils";
+import { cn, withTimeout } from "@/lib/utils";
 import type { MasterItem, MasterItemType } from "@/types/database";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -116,7 +116,11 @@ export function MastersPage() {
     }
     setError(null);
     try {
-      const data = await listMasterItems(masterType, false);
+      const data = await withTimeout(
+        listMasterItems(masterType, false),
+        10000,
+        `${itemLabel || "マスタ"}の読み込みがタイムアウトしました。再度お試しください。`,
+      );
       setItems(data);
     } catch (nextError) {
       setError(getErrorMessage(nextError, "マスタ項目の取得に失敗しました"));
@@ -125,11 +129,36 @@ export function MastersPage() {
         setLoading(false);
       }
     }
-  }, [masterType]);
+  }, [itemLabel, masterType]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void load();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
+      }
+    };
+
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [load, loading]);
 
   const openCreate = () => {
     setEditingItem(null);

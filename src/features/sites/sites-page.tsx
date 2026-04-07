@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { MapPinned, Pause, Play, Plus, Route } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
@@ -22,6 +22,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { activateSite, archiveSite, listSites, upsertSite } from "@/features/sites/site-service";
+import { withTimeout } from "@/lib/utils";
 import type { Site } from "@/types/database";
 
 const companyAddress = "大阪府東大阪市高井田西３丁目６−３";
@@ -69,22 +70,51 @@ export function SitesPage() {
     },
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await listSites(true);
+      const data = await withTimeout(
+        listSites(true),
+        10000,
+        "現場一覧の読み込みがタイムアウトしました。再度お試しください。",
+      );
       setSites(data);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "現場一覧の取得に失敗しました");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    const retryIfStillLoading = () => {
+      if (document.visibilityState === "hidden" || !loading) {
+        return;
+      }
+      void load();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        retryIfStillLoading();
+      }
+    };
+
+    window.addEventListener("focus", retryIfStillLoading);
+    window.addEventListener("pageshow", retryIfStillLoading);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", retryIfStillLoading);
+      window.removeEventListener("pageshow", retryIfStillLoading);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [load, loading]);
 
   const openCreate = () => {
     setEditingSite(null);

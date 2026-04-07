@@ -34,3 +34,22 @@ export function downloadTextFile(filename: string, content: string, mimeType: st
   anchor.click();
   URL.revokeObjectURL(url);
 }
+
+export async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message = "読み込みがタイムアウトしました"): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(message));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+  }
+}

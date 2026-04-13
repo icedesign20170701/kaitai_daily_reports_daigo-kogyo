@@ -41,7 +41,7 @@ export function ReportFormPage() {
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
         ]),
-        12000,
+        5000,
         "日報入力の初期データ読み込みがタイムアウトしました。再度お試しください。",
       );
       setSites(siteData);
@@ -108,7 +108,7 @@ export function ReportFormPage() {
     <PageShell>
       <PageHeader title="日報入力" description="" />
       {loading ? (
-        <LoadingState message="日報入力に必要なデータを読み込んでいます..." showProgress expectedDurationMs={5000} />
+        <LoadingState message="日報入力に必要なデータを読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : (

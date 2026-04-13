@@ -18,7 +18,7 @@ export function ProtectedRoute() {
     const startedAt = Date.now();
     const intervalId = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
-      const nextProgress = Math.min(95, Math.round((elapsed / 8000) * 100));
+      const nextProgress = Math.min(95, Math.round((elapsed / 4000) * 100));
       setProgress(Math.max(5, nextProgress));
     }, 120);
 

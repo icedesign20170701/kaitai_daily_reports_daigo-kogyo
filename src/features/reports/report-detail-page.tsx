@@ -141,7 +141,7 @@ export function ReportDetailPage() {
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
         ]),
-        12000,
+        5000,
         "日報詳細の読み込みがタイムアウトしました。再度お試しください。",
       );
       setReport(detail);
@@ -206,7 +206,7 @@ export function ReportDetailPage() {
     if (!id) return;
     const detail = await withSupabaseRecovery(
       () => getReportDetail(id),
-      8000,
+      4000,
       "最新の日報データ取得がタイムアウトしました。再度お試しください。",
     );
     setReport(detail);
@@ -298,7 +298,7 @@ export function ReportDetailPage() {
       />
 
       {loading ? (
-        <LoadingState message="日報データを読み込んでいます..." showProgress expectedDurationMs={5000} />
+        <LoadingState message="日報データを読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : !report ? (

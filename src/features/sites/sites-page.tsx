@@ -76,7 +76,7 @@ export function SitesPage() {
     try {
       const data = await withSupabaseRecovery(
         () => listSites(true),
-        10000,
+        5000,
         "現場一覧の読み込みがタイムアウトしました。再度お試しください。",
       );
       setSites(data);
@@ -212,7 +212,7 @@ export function SitesPage() {
       />
 
       {loading ? (
-        <LoadingState message="現場一覧を読み込んでいます..." showProgress expectedDurationMs={5000} />
+        <LoadingState message="現場一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : sites.length === 0 ? (

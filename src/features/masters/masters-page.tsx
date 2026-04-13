@@ -130,7 +130,7 @@ export function MastersPage() {
           masterType === "worker"
             ? Promise.all([listMasterItems(masterType, false), listMasterItems("workerLabel", false)])
             : Promise.all([listMasterItems(masterType, false), Promise.resolve([] as MasterItem[])]),
-        10000,
+        5000,
         `${itemLabel || "マスタ"}の読み込みがタイムアウトしました。再度お試しください。`,
       );
       setItems(data[0] ?? []);
@@ -512,7 +512,7 @@ export function MastersPage() {
       </div>
 
       {loading ? (
-        <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} showProgress expectedDurationMs={5000} />
+        <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (

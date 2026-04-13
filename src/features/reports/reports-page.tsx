@@ -151,7 +151,7 @@ export function ReportsPage() {
           siteId: filters.siteId === "all" ? undefined : filters.siteId,
           createdBy: filters.createdBy === "all" ? undefined : filters.createdBy,
         }),
-        12000,
+        5000,
         "日報一覧の読み込みがタイムアウトしました。再度お試しください。",
       );
       setReports(data);
@@ -163,8 +163,8 @@ export function ReportsPage() {
   }, [filters]);
 
   useEffect(() => {
-    void withSupabaseRecovery(() => listSites(true), 8000).then(setSites).catch(() => undefined);
-    void withSupabaseRecovery(() => listAppUsers(), 8000).then(setAppUsers).catch(() => undefined);
+    void withSupabaseRecovery(() => listSites(true), 4000).then(setSites).catch(() => undefined);
+    void withSupabaseRecovery(() => listAppUsers(), 4000).then(setAppUsers).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -379,7 +379,7 @@ export function ReportsPage() {
       </Card>
 
       {loading ? (
-        <LoadingState message="日報一覧を読み込んでいます..." showProgress expectedDurationMs={6000} />
+        <LoadingState message="日報一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : reports.length === 0 ? (

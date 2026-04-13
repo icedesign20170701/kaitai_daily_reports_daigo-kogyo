@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const loadingTimeout = window.setTimeout(() => {
       if (!mounted) return;
       setLoading(false);
-    }, 8000);
+    }, 4000);
 
     const loadAppUser = async (currentUser: User | null) => {
       if (!currentUser) {

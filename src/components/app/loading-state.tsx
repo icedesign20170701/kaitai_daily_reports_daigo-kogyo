@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export function LoadingState({
   message = "読み込み中...",
   showProgress = false,
-  expectedDurationMs = 8000,
+  expectedDurationMs = 3500,
 }: {
   message?: string;
   showProgress?: boolean;

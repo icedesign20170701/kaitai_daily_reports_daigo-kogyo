@@ -81,7 +81,7 @@ export function UserAdminPage() {
     try {
       const data = await withSupabaseRecovery(
         () => listAppUsers(),
-        10000,
+        5000,
         "アカウント一覧の読み込みがタイムアウトしました。再度お試しください。",
       );
       setUsers(data as AppUser[]);
@@ -287,7 +287,7 @@ export function UserAdminPage() {
       <PageHeader title="アカウント管理" description="マスターアカウントは全ユーザーの表示名と権限を編集できます。" />
 
       {loading ? (
-        <LoadingState message="アカウント一覧を読み込んでいます..." showProgress expectedDurationMs={5000} />
+        <LoadingState message="アカウント一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} />
       ) : users.length === 0 ? (

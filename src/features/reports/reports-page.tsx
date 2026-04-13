@@ -434,12 +434,12 @@ export function ReportsPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[28%] min-w-[180px]">現場名</TableHead>
-                        <TableHead className="w-[18%] min-w-[140px]">区分</TableHead>
+                        <TableHead className="w-[16%] min-w-[124px]">区分</TableHead>
                         <TableHead className="w-[14%] min-w-[120px]">作成者</TableHead>
                         <TableHead className="w-[10%] min-w-[76px]">人数</TableHead>
                         <TableHead className="w-[10%] min-w-[92px]">進捗</TableHead>
-                        <TableHead className="w-[18%] min-w-[180px]">備考</TableHead>
-                        <TableHead className="w-[120px]">詳細</TableHead>
+                        <TableHead className="w-[20%] min-w-[180px]">備考</TableHead>
+                        <TableHead className="w-[96px] min-w-[96px]">詳細</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -461,7 +461,7 @@ export function ReportsPage() {
                           <TableCell className="max-w-0">
                             <span className="block truncate">{report.remarks ?? "-"}</span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap">
                             <Link
                               to={`/reports/${report.id}`}
                               className={cn(buttonVariants({ variant: "outline", size: "sm" }))}

@@ -20,9 +20,9 @@ import { listAppUsers } from "@/features/auth/auth-service";
 import { listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
-import type { AppUser, DailyReport, Site } from "@/types/database";
+import type { AppUser, DailyReport, MasterItem, Site } from "@/types/database";
 
-type ReportListRow = DailyReport & { site: Site | null; creator_display_name?: string | null };
+type ReportListRow = DailyReport & { site: Site | null; work_category?: MasterItem | null; creator_display_name?: string | null };
 
 function DateFilterField({
   id,

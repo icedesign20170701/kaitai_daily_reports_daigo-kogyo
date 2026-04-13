@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { type FieldErrors, useFieldArray, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,8 +13,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/features/auth/auth-context";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, toDateInputValue } from "@/lib/utils";
 import type {
@@ -30,45 +30,171 @@ import type {
 } from "@/types/database";
 
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
+const disposalTypeOptions = [
+  { value: "wood", label: "木類" },
+  { value: "board", label: "ボード" },
+  { value: "rubble", label: "ガラ" },
+  { value: "scrap", label: "スクラップ" },
+  { value: "mixed", label: "混載" },
+  { value: "other", label: "その他" },
+] as const;
 
-const reportSchema = z.object({
-  report_date: z.string().min(1, "作業日を入力してください"),
-  site_id: z.string().min(1, "現場名を選択してください"),
-  worker_ids: z.array(z.string()).min(1, "作業員を1人以上選択してください"),
-  work_shift: z.enum(["day", "night"]),
-  contract_type: z.enum(["contract", "regular"]),
-  miscellaneous_costs: z.string().max(3000, "3000文字以内で入力してください"),
-  lease_entries: z.array(
-    z.object({
-      lease_item_id: z.string().min(1),
-      count: z.coerce.number().min(0),
-    }),
-  ),
-  disposal_entries: z.array(
-    z.object({
-      disposal_item_id: z.string().min(1),
-      ton_count: z.coerce.number().min(0),
-      truck_count: z.coerce.number().min(0),
-    }),
-  ),
-  transport_entries: z.array(
-    z.object({
-      transport_item_id: z.string().min(1),
-      count: z.coerce.number().min(0),
-    }),
-  ),
-  other_vehicle_entries: z.array(
-    z.object({
-      label: z.string().max(100, "100文字以内で入力してください"),
-      count: z.coerce.number().min(0),
-    }),
-  ),
-  other_workers_note: z.string().max(1000, "1000文字以内で入力してください"),
-  remarks: z.string().max(2000, "2000文字以内で入力してください"),
-  progress_status: z.enum(["continuing", "completed"]),
-});
+const reportSchema = z
+  .object({
+    report_date: z.string().min(1, "作業日を入力してください"),
+    site_id: z.string().min(1, "現場名を選択してください"),
+    work_category_id: z.string().min(1, "工事分類を選択してください"),
+    worker_ids: z.array(z.string()).min(1, "作業員を1人以上選択してください"),
+    work_shift: z.enum(["day", "night"]),
+    contract_type: z.enum(["contract", "regular"]),
+    miscellaneous_costs: z.string().max(3000, "3000文字以内で入力してください"),
+    lease_entries: z.array(
+      z.object({
+        lease_item_id: z.string().min(1),
+        label: z.string().trim().max(100, "100文字以内で入力してください"),
+        count: z.coerce.number().min(0),
+      }),
+    ),
+    disposal_entries: z.array(
+      z.object({
+        disposal_item_id: z.string().min(1),
+        waste_type: z.enum(["wood", "board", "rubble", "scrap", "mixed", "other"]),
+        other_label: z.string().trim().max(100, "100文字以内で入力してください"),
+        ton_count: z.coerce.number().min(0),
+        truck_count: z.coerce.number().min(0),
+      }),
+    ),
+    transport_entries: z.array(
+      z.object({
+        transport_item_id: z.string().min(1),
+        count: z.coerce.number().min(0),
+      }),
+    ),
+    other_vehicle_entries: z.array(
+      z.object({
+        label: z.string().max(100, "100文字以内で入力してください"),
+        count: z.coerce.number().min(0),
+      }),
+    ),
+    other_workers_note: z.string().max(1000, "1000文字以内で入力してください"),
+    remarks: z.string().max(2000, "2000文字以内で入力してください"),
+    progress_status: z.enum(["continuing", "completed"]),
+  })
+  .superRefine((values, ctx) => {
+    values.lease_entries.forEach((entry, index) => {
+      if (!entry.label.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["lease_entries", index, "label"],
+          message: "リース車両を入力してください",
+        });
+      }
+      if (entry.count <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["lease_entries", index, "count"],
+          message: "台数を1以上にしてください",
+        });
+      }
+    });
+
+    values.disposal_entries.forEach((entry, index) => {
+      if (entry.waste_type === "other" && !entry.other_label.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["disposal_entries", index, "other_label"],
+          message: "その他のゴミ名称を入力してください",
+        });
+      }
+      if (entry.ton_count <= 0 && entry.truck_count <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["disposal_entries", index, "ton_count"],
+          message: "T または 台数のどちらかを1以上にしてください",
+        });
+      }
+    });
+
+    values.transport_entries.forEach((entry, index) => {
+      if (entry.count <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["transport_entries", index, "count"],
+          message: "台数を1以上にしてください",
+        });
+      }
+    });
+
+    values.other_vehicle_entries.forEach((entry, index) => {
+      if (!entry.label.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["other_vehicle_entries", index, "label"],
+          message: "車両名を入力してください",
+        });
+      }
+      if (entry.count <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["other_vehicle_entries", index, "count"],
+          message: "台数を1以上にしてください",
+        });
+      }
+    });
+  });
 
 type ReportSchemaValues = z.infer<typeof reportSchema>;
+
+function findFirstErrorPath(errors: FieldErrors<ReportSchemaValues>, prefix = ""): string | null {
+  for (const [key, value] of Object.entries(errors)) {
+    if (!value) {
+      continue;
+    }
+
+    const path = prefix ? `${prefix}.${key}` : key;
+
+    if (Array.isArray(value)) {
+      for (let index = 0; index < value.length; index += 1) {
+        const nested = value[index];
+        if (!nested) {
+          continue;
+        }
+        const nestedPath = findFirstErrorPath(nested as FieldErrors<ReportSchemaValues>, `${path}.${index}`);
+        if (nestedPath) {
+          return nestedPath;
+        }
+      }
+      continue;
+    }
+
+    if (typeof value === "object") {
+      if ("message" in value && value.message) {
+        return path;
+      }
+      const nestedPath = findFirstErrorPath(value as FieldErrors<ReportSchemaValues>, path);
+      if (nestedPath) {
+        return nestedPath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function scrollToError(path: string) {
+  const target =
+    document.querySelector<HTMLElement>(`[data-field-path="${path}"]`) ??
+    document.querySelector<HTMLElement>(`[name="${path}"]`);
+
+  if (!target) {
+    return;
+  }
+
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  window.setTimeout(() => {
+    target.focus?.();
+  }, 120);
+}
 
 function PhotoPreview({
   photo,
@@ -87,14 +213,14 @@ function PhotoPreview({
   );
 }
 
-function DateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function DateField({ value, onChange, fieldPath }: { value: string; onChange: (value: string) => void; fieldPath?: string }) {
   const selectedDate = value ? new Date(`${value}T00:00:00`) : undefined;
   const [open, setOpen] = useState(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="flex w-full items-center justify-between gap-2 overflow-hidden rounded-xl border bg-card px-3 py-3 text-left shadow-sm">
+        <button data-field-path={fieldPath} type="button" className="flex w-full items-center justify-between gap-2 overflow-hidden rounded-xl border bg-card px-3 py-3 text-left shadow-sm">
           <span className="truncate text-sm font-medium">{selectedDate ? formatDate(value) : "日付を選択してください"}</span>
           <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
@@ -181,42 +307,84 @@ function WorkerGroup({
   );
 }
 
+function WorkerCostSummary({
+  rows,
+}: {
+  rows: Array<{ label: string; count: number; unitPrice: number; subtotal: number }>;
+}) {
+  const total = rows.reduce((sum, row) => sum + row.subtotal, 0);
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border bg-background p-3">
+      <p className="mb-2 text-sm font-semibold">ラベル別集計</p>
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate">{row.label}</span>
+            <span className="shrink-0 text-muted-foreground">
+              {row.count}人 × {row.unitPrice.toLocaleString()}円 = {row.subtotal.toLocaleString()}円
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t pt-3 text-sm font-semibold">
+        <span>合計</span>
+        <span>{total.toLocaleString()}円</span>
+      </div>
+    </div>
+  );
+}
+
 function QuantitySelect({
   value,
   onChange,
   placeholder = "0",
+  fieldPath,
 }: {
   value: number;
   onChange: (value: number) => void;
   placeholder?: string;
+  fieldPath?: string;
 }) {
   return (
-    <Select value={String(value)} onValueChange={(next) => onChange(Number(next))}>
-      <SelectTrigger className="w-[88px]">
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
+    <div className="relative">
+      <select
+        data-field-path={fieldPath}
+        className="flex h-11 w-[96px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+        value={String(value)}
+        aria-label={placeholder}
+        onChange={(event) => onChange(Number(event.target.value))}
+      >
         {numberOptions.map((option) => (
-          <SelectItem key={option} value={String(option)}>
+          <option key={option} value={String(option)}>
             {option}
-          </SelectItem>
+          </option>
         ))}
-      </SelectContent>
-    </Select>
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+    </div>
   );
 }
 
 function LeaseItemRows({
   item,
   rows,
+  errors,
   onAdd,
   onRemove,
+  onChangeLabel,
   onChange,
 }: {
   item: MasterItem;
   rows: Array<{ fieldIndex: number; entry: ReportLeaseEntry }>;
+  errors?: Record<number, { label?: string; count?: string }>;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  onChangeLabel: (index: number, value: string) => void;
   onChange: (index: number, value: number) => void;
 }) {
   return (
@@ -231,13 +399,26 @@ function LeaseItemRows({
       <div className="space-y-2">
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">追加ボタンで入力欄を増やせます。</p> : null}
         {rows.map(({ fieldIndex, entry }, index) => (
-          <div key={`${item.id}-${fieldIndex}`} className="flex items-center gap-2 rounded-xl border px-3 py-2">
-            <span className="text-sm font-medium">{index + 1}.</span>
-            <QuantitySelect value={entry.count} onChange={(value) => onChange(fieldIndex, value)} />
-            <span className="text-sm">台</span>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+          <div key={`lease-${fieldIndex}`} className="space-y-2 rounded-xl border px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{index + 1}.</span>
+              <Input
+                data-field-path={`lease_entries.${fieldIndex}.label`}
+                className="min-w-[180px] flex-1"
+                value={entry.label}
+                onChange={(event) => onChangeLabel(fieldIndex, event.target.value)}
+                placeholder="リース車両を入力"
+              />
+              <div className="flex items-center gap-2">
+                <QuantitySelect fieldPath={`lease_entries.${fieldIndex}.count`} value={entry.count} onChange={(value) => onChange(fieldIndex, value)} />
+                <span className="text-sm">台</span>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            {errors?.[fieldIndex]?.label ? <p className="text-sm text-destructive">{errors[fieldIndex]?.label}</p> : null}
+            {errors?.[fieldIndex]?.count ? <p className="text-sm text-destructive">{errors[fieldIndex]?.count}</p> : null}
           </div>
         ))}
       </div>
@@ -248,15 +429,21 @@ function LeaseItemRows({
 function DisposalItemRows({
   item,
   rows,
+  errors,
   onAdd,
   onRemove,
+  onChangeType,
+  onChangeOtherLabel,
   onChangeTon,
   onChangeTruck,
 }: {
   item: MasterItem;
   rows: Array<{ fieldIndex: number; entry: ReportDisposalEntry }>;
+  errors?: Record<number, { waste_type?: string; other_label?: string; ton_count?: string; truck_count?: string }>;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  onChangeType: (index: number, value: ReportDisposalEntry["waste_type"]) => void;
+  onChangeOtherLabel: (index: number, value: string) => void;
   onChangeTon: (index: number, value: number) => void;
   onChangeTruck: (index: number, value: number) => void;
 }) {
@@ -272,15 +459,43 @@ function DisposalItemRows({
       <div className="space-y-2">
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">追加ボタンで入力欄を増やせます。</p> : null}
         {rows.map(({ fieldIndex, entry }, index) => (
-          <div key={`${item.id}-${fieldIndex}`} className="flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2">
-            <span className="text-sm font-medium">{index + 1}.</span>
-            <QuantitySelect value={entry.ton_count} onChange={(value) => onChangeTon(fieldIndex, value)} />
-            <span className="text-sm">T</span>
-            <QuantitySelect value={entry.truck_count} onChange={(value) => onChangeTruck(fieldIndex, value)} />
-            <span className="text-sm">台</span>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+          <div key={`${item.id}-${fieldIndex}`} className="space-y-2 rounded-xl border px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">{index + 1}.</span>
+              <div className="relative">
+                <select
+                  data-field-path={`disposal_entries.${fieldIndex}.waste_type`}
+                  className="flex h-11 w-[160px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                  value={entry.waste_type}
+                  onChange={(event) => onChangeType(fieldIndex, event.target.value as ReportDisposalEntry["waste_type"])}
+                >
+                  {disposalTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+              </div>
+              {entry.waste_type === "other" ? (
+                <Input
+                  data-field-path={`disposal_entries.${fieldIndex}.other_label`}
+                  className="min-w-[160px] flex-1"
+                  value={entry.other_label}
+                  onChange={(event) => onChangeOtherLabel(fieldIndex, event.target.value)}
+                  placeholder="ゴミ名称を入力"
+                />
+              ) : null}
+              <QuantitySelect fieldPath={`disposal_entries.${fieldIndex}.ton_count`} value={entry.ton_count} onChange={(value) => onChangeTon(fieldIndex, value)} />
+              <span className="text-sm">T</span>
+              <QuantitySelect fieldPath={`disposal_entries.${fieldIndex}.truck_count`} value={entry.truck_count} onChange={(value) => onChangeTruck(fieldIndex, value)} />
+              <span className="text-sm">台</span>
+              <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            {errors?.[fieldIndex]?.other_label ? <p className="text-sm text-destructive">{errors[fieldIndex]?.other_label}</p> : null}
+            {errors?.[fieldIndex]?.ton_count ? <p className="text-sm text-destructive">{errors[fieldIndex]?.ton_count}</p> : null}
           </div>
         ))}
       </div>
@@ -291,12 +506,14 @@ function DisposalItemRows({
 function TransportItemRows({
   item,
   rows,
+  errors,
   onAdd,
   onRemove,
   onChange,
 }: {
   item: MasterItem;
   rows: Array<{ fieldIndex: number; entry: ReportTransportEntry }>;
+  errors?: Record<number, { count?: string }>;
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChange: (index: number, value: number) => void;
@@ -313,13 +530,16 @@ function TransportItemRows({
       <div className="space-y-2">
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">追加ボタンで入力欄を増やせます。</p> : null}
         {rows.map(({ fieldIndex, entry }, index) => (
-          <div key={`${item.id}-${fieldIndex}`} className="flex items-center gap-2 rounded-xl border px-3 py-2">
-            <span className="text-sm font-medium">{index + 1}.</span>
-            <QuantitySelect value={entry.count} onChange={(value) => onChange(fieldIndex, value)} />
-            <span className="text-sm">台</span>
-            <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+          <div key={`${item.id}-${fieldIndex}`} className="space-y-2 rounded-xl border px-3 py-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{index + 1}.</span>
+              <QuantitySelect fieldPath={`transport_entries.${fieldIndex}.count`} value={entry.count} onChange={(value) => onChange(fieldIndex, value)} />
+              <span className="text-sm">台</span>
+              <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            {errors?.[fieldIndex]?.count ? <p className="text-sm text-destructive">{errors[fieldIndex]?.count}</p> : null}
           </div>
         ))}
       </div>
@@ -329,12 +549,14 @@ function TransportItemRows({
 
 function OtherVehicleRows({
   rows,
+  errors,
   onAdd,
   onRemove,
   onChangeLabel,
   onChangeCount,
 }: {
   rows: Array<{ fieldIndex: number; entry: OtherVehicleEntry }>;
+  errors?: Record<number, { label?: string; count?: string }>;
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChangeLabel: (index: number, value: string) => void;
@@ -352,15 +574,19 @@ function OtherVehicleRows({
       <div className="space-y-2">
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">追加ボタンで自由入力の車両欄を増やせます。</p> : null}
         {rows.map(({ fieldIndex, entry }) => (
-          <div key={`other-vehicle-${fieldIndex}`} className="grid gap-2 rounded-xl border p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-            <Input value={entry.label} onChange={(event) => onChangeLabel(fieldIndex, event.target.value)} placeholder="車両名を入力" />
-            <div className="flex items-center gap-2">
-              <QuantitySelect value={entry.count} onChange={(value) => onChangeCount(fieldIndex, value)} />
-              <span className="text-sm">台</span>
+          <div key={`other-vehicle-${fieldIndex}`} className="space-y-2 rounded-xl border p-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+              <Input data-field-path={`other_vehicle_entries.${fieldIndex}.label`} value={entry.label} onChange={(event) => onChangeLabel(fieldIndex, event.target.value)} placeholder="車両名を入力" />
+              <div className="flex items-center gap-2">
+                <QuantitySelect fieldPath={`other_vehicle_entries.${fieldIndex}.count`} value={entry.count} onChange={(value) => onChangeCount(fieldIndex, value)} />
+                <span className="text-sm">台</span>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="justify-self-end" onClick={() => onRemove(fieldIndex)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
-            <Button type="button" variant="ghost" size="icon" className="justify-self-end" onClick={() => onRemove(fieldIndex)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {errors?.[fieldIndex]?.label ? <p className="text-sm text-destructive">{errors[fieldIndex]?.label}</p> : null}
+            {errors?.[fieldIndex]?.count ? <p className="text-sm text-destructive">{errors[fieldIndex]?.count}</p> : null}
           </div>
         ))}
       </div>
@@ -370,7 +596,9 @@ function OtherVehicleRows({
 
 export function ReportForm({
   sites,
+  workCategories,
   workers,
+  workerLabels,
   leaseItems,
   disposalItems,
   transportItems,
@@ -381,7 +609,9 @@ export function ReportForm({
   onDeleteExistingPhoto,
 }: {
   sites: Site[];
+  workCategories: MasterItem[];
   workers: MasterItem[];
+  workerLabels: MasterItem[];
   leaseItems: MasterItem[];
   disposalItems: MasterItem[];
   transportItems: MasterItem[];
@@ -391,20 +621,29 @@ export function ReportForm({
   onSubmit: (values: ReportFormValues, files: File[]) => Promise<void>;
   onDeleteExistingPhoto?: (photo: ReportPhoto) => Promise<void>;
 }) {
+  const { isMaster } = useAuth();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const form = useForm<ReportSchemaValues>({
     resolver: zodResolver(reportSchema),
     defaultValues: {
       report_date: initialReport?.report_date ?? toDateInputValue(),
       site_id: initialReport?.site_id ?? "",
+      work_category_id: initialReport?.work_category_id ?? "",
       worker_ids: initialReport?.workers.map((item) => item.id) ?? [],
       work_shift: initialReport?.work_shift ?? "day",
       contract_type: initialReport?.contract_type ?? "contract",
       miscellaneous_costs: initialReport?.miscellaneous_costs ?? "",
-      lease_entries: initialReport?.lease_entries.map((entry) => ({ lease_item_id: entry.lease_item_id, count: entry.count })) ?? [],
+      lease_entries:
+        initialReport?.lease_entries.map((entry) => ({
+          lease_item_id: entry.lease_item_id ?? "",
+          label: entry.label || "",
+          count: entry.count,
+        })) ?? [],
       disposal_entries:
         initialReport?.disposal_entries.map((entry) => ({
           disposal_item_id: entry.disposal_item_id,
+          waste_type: entry.waste_type,
+          other_label: entry.other_label,
           ton_count: entry.ton_count,
           truck_count: entry.truck_count,
         })) ?? [],
@@ -443,6 +682,30 @@ export function ReportForm({
     return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
   }, [workers]);
 
+  const workerCostSummary = useMemo(() => {
+    if (!isMaster) {
+      return [];
+    }
+
+    const selectedWorkers = workers.filter((worker) => workerIds.includes(worker.id));
+    const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
+    const grouped = new Map<string, { count: number; unitPrice: number }>();
+
+    selectedWorkers.forEach((worker) => {
+      const label = worker.group_label?.trim() || "ラベル未設定";
+      const current = grouped.get(label) ?? { count: 0, unitPrice: labelPriceMap.get(label) ?? 0 };
+      current.count += 1;
+      grouped.set(label, current);
+    });
+
+    return Array.from(grouped.entries()).map(([label, value]) => ({
+      label,
+      count: value.count,
+      unitPrice: value.unitPrice,
+      subtotal: value.count * value.unitPrice,
+    }));
+  }, [isMaster, workerIds, workerLabels, workers]);
+
   const previewPhotos = useMemo(
     () =>
       pendingFiles.map((file, index) => ({
@@ -474,14 +737,58 @@ export function ReportForm({
     event.target.value = "";
   };
 
-  const submit = form.handleSubmit(async (values) => {
-    try {
-      await onSubmit({ ...values, worker_count: values.worker_ids.length }, pendingFiles);
-      setPendingFiles([]);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存に失敗しました");
-    }
-  });
+  const leaseEntryErrors = (form.formState.errors.lease_entries ?? []) as Array<{ label?: { message?: string }; count?: { message?: string } } | undefined>;
+  const disposalEntryErrors = (form.formState.errors.disposal_entries ?? []) as Array<
+    { waste_type?: { message?: string }; other_label?: { message?: string }; ton_count?: { message?: string }; truck_count?: { message?: string } } | undefined
+  >;
+  const transportEntryErrors = (form.formState.errors.transport_entries ?? []) as Array<{ count?: { message?: string } } | undefined>;
+  const otherVehicleEntryErrors = (form.formState.errors.other_vehicle_entries ?? []) as Array<{ label?: { message?: string }; count?: { message?: string } } | undefined>;
+
+  const leaseErrors = Object.fromEntries(
+    leaseEntryErrors.flatMap((entryError, index) =>
+      entryError
+        ? [[index, { label: entryError.label?.message, count: entryError.count?.message }]]
+        : [],
+    ),
+  ) as Record<number, { label?: string; count?: string }>;
+
+  const disposalErrors = Object.fromEntries(
+    disposalEntryErrors.flatMap((entryError, index) =>
+      entryError
+        ? [[index, { waste_type: entryError.waste_type?.message, other_label: entryError.other_label?.message, ton_count: entryError.ton_count?.message, truck_count: entryError.truck_count?.message }]]
+        : [],
+    ),
+  ) as Record<number, { waste_type?: string; other_label?: string; ton_count?: string; truck_count?: string }>;
+
+  const transportErrors = Object.fromEntries(
+    transportEntryErrors.flatMap((entryError, index) =>
+      entryError ? [[index, { count: entryError.count?.message }]] : [],
+    ),
+  ) as Record<number, { count?: string }>;
+
+  const otherVehicleErrors = Object.fromEntries(
+    otherVehicleEntryErrors.flatMap((entryError, index) =>
+      entryError ? [[index, { label: entryError.label?.message, count: entryError.count?.message }]] : [],
+    ),
+  ) as Record<number, { label?: string; count?: string }>;
+
+  const submit = form.handleSubmit(
+    async (values) => {
+      try {
+        await onSubmit({ ...values, worker_count: values.worker_ids.length }, pendingFiles);
+        setPendingFiles([]);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "保存に失敗しました");
+      }
+    },
+    (errors) => {
+      const firstErrorPath = findFirstErrorPath(errors);
+      if (firstErrorPath) {
+        scrollToError(firstErrorPath);
+      }
+      toast.error("未入力または不正な入力があります。内容を確認してください。");
+    },
+  );
 
   return (
     <form className="space-y-4" onSubmit={submit}>
@@ -503,7 +810,7 @@ export function ReportForm({
               <Label htmlFor="report_date">
                 作業日<span className="ml-1 text-destructive">*</span>
               </Label>
-              <DateField value={form.watch("report_date")} onChange={(value) => form.setValue("report_date", value, { shouldDirty: true, shouldValidate: true })} />
+              <DateField fieldPath="report_date" value={form.watch("report_date")} onChange={(value) => form.setValue("report_date", value, { shouldDirty: true, shouldValidate: true })} />
               {form.formState.errors.report_date ? <p className="text-sm text-destructive">{form.formState.errors.report_date.message}</p> : null}
             </div>
             <div className="min-w-0 space-y-2">
@@ -512,6 +819,7 @@ export function ReportForm({
               </Label>
               <div className="relative">
                 <select
+                  data-field-path="site_id"
                   className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
                   value={form.watch("site_id")}
                   onChange={(event) => form.setValue("site_id", event.target.value, { shouldDirty: true, shouldValidate: true })}
@@ -527,6 +835,29 @@ export function ReportForm({
               </div>
               {form.formState.errors.site_id ? <p className="text-sm text-destructive">{form.formState.errors.site_id.message}</p> : null}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>
+              工事分類<span className="ml-1 text-destructive">*</span>
+            </Label>
+            <div className="relative">
+              <select
+                data-field-path="work_category_id"
+                className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                value={form.watch("work_category_id")}
+                onChange={(event) => form.setValue("work_category_id", event.target.value, { shouldDirty: true, shouldValidate: true })}
+              >
+                <option value="">工事分類を選択してください</option>
+                {workCategories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+            </div>
+            {form.formState.errors.work_category_id ? <p className="text-sm text-destructive">{form.formState.errors.work_category_id.message}</p> : null}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -549,17 +880,19 @@ export function ReportForm({
           </FieldBlock>
 
           {leaseItems.length > 0 ? (
-            <FieldBlock title="リース関係">
-              <div className="grid gap-3 xl:grid-cols-3">
-                {leaseItems.map((item) => (
-                  <LeaseItemRows
-                    key={item.id}
-                    item={item}
-                    rows={leaseEntries
-                      .map((entry, index) => ({ fieldIndex: index, entry }))
-                      .filter(({ entry }) => entry.lease_item_id === item.id)}
-                    onAdd={() => leaseArray.append({ lease_item_id: item.id, count: 0 })}
+          <FieldBlock title="リース関係">
+            <div className="grid gap-3 xl:grid-cols-2">
+              {leaseItems.map((item) => (
+                <LeaseItemRows
+                  key={item.id}
+                  item={item}
+                  errors={leaseErrors}
+                  rows={leaseEntries
+                    .map((entry, index) => ({ fieldIndex: index, entry }))
+                    .filter(({ entry }) => entry.lease_item_id === item.id)}
+                    onAdd={() => leaseArray.append({ lease_item_id: item.id, label: "", count: 0 })}
                     onRemove={(index) => leaseArray.remove(index)}
+                    onChangeLabel={(index, value) => form.setValue(`lease_entries.${index}.label`, value, { shouldDirty: true })}
                     onChange={(index, value) => form.setValue(`lease_entries.${index}.count`, value, { shouldDirty: true })}
                   />
                 ))}
@@ -574,11 +907,14 @@ export function ReportForm({
                   <DisposalItemRows
                     key={item.id}
                     item={item}
+                    errors={disposalErrors}
                     rows={disposalEntries
                       .map((entry, index) => ({ fieldIndex: index, entry }))
                       .filter(({ entry }) => entry.disposal_item_id === item.id)}
-                    onAdd={() => disposalArray.append({ disposal_item_id: item.id, ton_count: 0, truck_count: 0 })}
+                    onAdd={() => disposalArray.append({ disposal_item_id: item.id, waste_type: "wood", other_label: "", ton_count: 0, truck_count: 0 })}
                     onRemove={(index) => disposalArray.remove(index)}
+                    onChangeType={(index, value) => form.setValue(`disposal_entries.${index}.waste_type`, value, { shouldDirty: true })}
+                    onChangeOtherLabel={(index, value) => form.setValue(`disposal_entries.${index}.other_label`, value, { shouldDirty: true })}
                     onChangeTon={(index, value) => form.setValue(`disposal_entries.${index}.ton_count`, value, { shouldDirty: true })}
                     onChangeTruck={(index, value) => form.setValue(`disposal_entries.${index}.truck_count`, value, { shouldDirty: true })}
                   />
@@ -594,6 +930,7 @@ export function ReportForm({
                   <TransportItemRows
                     key={item.id}
                     item={item}
+                    errors={transportErrors}
                     rows={transportEntries
                       .map((entry, index) => ({ fieldIndex: index, entry }))
                       .filter(({ entry }) => entry.transport_item_id === item.id)}
@@ -604,6 +941,7 @@ export function ReportForm({
                 ))}
               </div>
               <OtherVehicleRows
+                errors={otherVehicleErrors}
                 rows={otherVehicleEntries.map((entry, index) => ({ fieldIndex: index, entry }))}
                 onAdd={() => otherVehicleArray.append({ label: "", count: 0 })}
                 onRemove={(index) => otherVehicleArray.remove(index)}
@@ -614,11 +952,12 @@ export function ReportForm({
           ) : null}
 
           <FieldBlock title="作業員・その他備考" required>
-            <div className="rounded-xl bg-secondary/60 px-3 py-2 text-sm font-medium">作業人数: {selectedWorkerCount}人</div>
+            <div data-field-path="worker_ids" className="rounded-xl bg-secondary/60 px-3 py-2 text-sm font-medium">作業人数: {selectedWorkerCount}人</div>
+            {form.formState.errors.worker_ids ? <p className="text-sm text-destructive">{form.formState.errors.worker_ids.message}</p> : null}
             {workerGroups.map((group) => (
               <WorkerGroup key={group.label} title={group.label} items={group.items} values={workerIds} onToggle={updateWorkerSelection} />
             ))}
-            {form.formState.errors.worker_ids ? <p className="text-sm text-destructive">{form.formState.errors.worker_ids.message}</p> : null}
+            {isMaster ? <WorkerCostSummary rows={workerCostSummary} /> : null}
             <div className="space-y-2">
               <Label htmlFor="other_workers_note">上記以外の従業員</Label>
               <Textarea id="other_workers_note" rows={4} placeholder="マスタに未登録の従業員がいれば入力" {...form.register("other_workers_note")} />

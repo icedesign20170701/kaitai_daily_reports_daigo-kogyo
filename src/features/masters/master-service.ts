@@ -3,9 +3,11 @@ import type { MasterItem, MasterItemType } from "@/types/database";
 
 const tableMap: Record<MasterItemType, string> = {
   worker: "workers",
+  workerLabel: "worker_labels",
   lease: "lease_items",
   disposal: "disposal_items",
   transport: "transport_items",
+  workCategory: "work_categories",
 };
 
 const masterCache = new Map<string, MasterItem[]>();
@@ -51,7 +53,21 @@ export async function upsertMasterItem(
 ) {
   const normalizedPayload =
     type === "worker"
-      ? payload
+      ? {
+          id: payload.id,
+          name: payload.name,
+          group_label: payload.group_label ?? null,
+          sort_order: payload.sort_order,
+          is_active: payload.is_active,
+        }
+      : type === "workerLabel"
+        ? {
+            id: payload.id,
+            name: payload.name,
+            unit_price: payload.unit_price ?? 0,
+            sort_order: payload.sort_order,
+            is_active: payload.is_active,
+          }
       : {
           id: payload.id,
           name: payload.name,
@@ -83,6 +99,14 @@ export async function reorderMasterItems(type: MasterItemType, items: MasterItem
           sort_order: index,
           is_active: item.is_active,
         }
+      : type === "workerLabel"
+        ? {
+            id: item.id,
+            name: item.name,
+            unit_price: item.unit_price ?? 0,
+            sort_order: index,
+            is_active: item.is_active,
+          }
       : {
           id: item.id,
           name: item.name,
@@ -109,6 +133,14 @@ export async function archiveMasterItem(type: MasterItemType, item: MasterItem) 
           sort_order: item.sort_order,
           is_active: false,
         }
+      : type === "workerLabel"
+        ? {
+            id: item.id,
+            name: item.name,
+            unit_price: item.unit_price ?? 0,
+            sort_order: item.sort_order,
+            is_active: false,
+          }
       : {
           id: item.id,
           name: item.name,

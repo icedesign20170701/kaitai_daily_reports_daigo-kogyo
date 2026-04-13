@@ -19,7 +19,7 @@ cp .env.example .env
 `.env` に Supabase の URL と anon key、および画像アップロード API の URL を設定してください。
 
 3. Supabase の SQL エディタで [`src/supabase.sql`](/Users/yuma/Documents/develop/kaitai_daily_reports/src/supabase.sql) を実行します。
-   既に運用中の環境へ機能追加を反映する場合も、最新 SQL の再実行が必要です。最近の変更では `app_users.sort_order` が追加されています。
+   既に運用中の環境へ機能追加を反映する場合も、最新 SQL の再実行が必要です。最近の変更では `app_users.sort_order`、`worker_labels` テーブルが追加されています。
 
 4. 自社サーバー側に画像アップロードAPIを用意します。
 
@@ -51,6 +51,7 @@ npm run dev
 - `/reports/:id`
 - `/sites`
 - `/masters/workers`
+- `/masters/worker-labels`
 - `/masters/lease-items`
 - `/masters/disposal-items`
 - `/masters/transport-items`
@@ -65,7 +66,7 @@ npm run dev
 - 日報への作業員、リース関係、ゴミ処分、車両・運搬の紐付け
 - 写真の複数アップロードと一覧表示
 - 日報一覧の期間、現場、記入者フィルタと CSV 出力
-- 作業員、リース関係、ゴミ処分、車両・運搬のマスタ管理
+- 作業員ラベル、作業員、リース関係、ゴミ処分、車両・運搬のマスタ管理
 - マスターアカウント専用のアカウント管理
 - アカウント管理での表示順並び替え
 - 認証済みユーザーのみ CRUD を許可する簡易 RLS

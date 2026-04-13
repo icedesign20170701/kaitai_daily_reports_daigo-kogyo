@@ -8,7 +8,7 @@ import { signOut } from "@/features/auth/auth-service";
 const navItems = [
   { to: "/reports", label: "日報", icon: ClipboardList },
   { to: "/sites", label: "現場", icon: MapPinned },
-  { to: "/masters/workers", label: "マスタ", icon: Settings2 },
+  { to: "/masters/work-categories", label: "マスタ", icon: Settings2 },
   { to: "/settings/profile", label: "設定", icon: UserCircle2 },
 ];
 

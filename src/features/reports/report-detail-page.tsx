@@ -49,8 +49,44 @@ function groupedWorkerRows(workers: MasterItem[]) {
   return Array.from(map.entries()).map(([label, names]) => `${label}: ${names.join(" / ")}`);
 }
 
+function buildWorkerCostRows(workers: MasterItem[], workerLabels: MasterItem[]) {
+  const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
+  const grouped = new Map<string, { count: number; unitPrice: number }>();
+
+  workers.forEach((worker) => {
+    const label = worker.group_label?.trim() || "ラベル未設定";
+    const current = grouped.get(label) ?? { count: 0, unitPrice: labelPriceMap.get(label) ?? 0 };
+    current.count += 1;
+    grouped.set(label, current);
+  });
+
+  return Array.from(grouped.entries()).map(([label, value]) => ({
+    label,
+    count: value.count,
+    unitPrice: value.unitPrice,
+    subtotal: value.count * value.unitPrice,
+  }));
+}
+
 function otherVehicleRows(entries: OtherVehicleEntry[]) {
   return entries.filter((entry) => entry.label.trim()).map((entry) => `${entry.label}: ${entry.count}台`);
+}
+
+function getDisposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other") {
+  switch (value) {
+    case "wood":
+      return "木類";
+    case "board":
+      return "ボード";
+    case "rubble":
+      return "ガラ";
+    case "scrap":
+      return "スクラップ";
+    case "mixed":
+      return "混載";
+    case "other":
+      return "その他";
+  }
 }
 
 function formatEditedAt(value: string) {
@@ -79,7 +115,9 @@ export function ReportDetailPage() {
   const [masterOverride, setMasterOverride] = useState(false);
   const [report, setReport] = useState<DailyReportDetail | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+  const [workCategories, setWorkCategories] = useState<MasterItem[]>([]);
   const [workers, setWorkers] = useState<MasterItem[]>([]);
+  const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
   const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
@@ -92,11 +130,13 @@ export function ReportDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [detail, siteData, workerData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+      const [detail, siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
         () => Promise.all([
           getReportDetail(id),
           listSites(false),
+          listMasterItems("workCategory", false),
           listMasterItems("worker", false),
+          listMasterItems("workerLabel", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
@@ -106,7 +146,9 @@ export function ReportDetailPage() {
       );
       setReport(detail);
       setSites(siteData);
+      setWorkCategories(workCategoryData);
       setWorkers(workerData);
+      setWorkerLabels(workerLabelData);
       setLeaseItems(leaseData);
       setDisposalItems(disposalData);
       setTransportItems(transportData);
@@ -212,20 +254,25 @@ export function ReportDetailPage() {
   const canEditReport = Boolean(user && report && (report.created_by === user.id || isMaster || masterOverride));
 
   const leaseRows = useMemo(
-    () => report?.lease_entries.filter((entry) => entry.count > 0).map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.count}台`) ?? [],
+    () =>
+      report?.lease_entries
+        .filter((entry) => entry.count > 0)
+        .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.label || "車両未設定"}: ${entry.count}台`) ?? [],
     [report],
   );
   const disposalRows = useMemo(
     () =>
       report?.disposal_entries
         .filter((entry) => entry.ton_count > 0 || entry.truck_count > 0)
-        .map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.ton_count}T${entry.truck_count}台`) ?? [],
+        .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.waste_type === "other" ? entry.other_label || "その他" : getDisposalTypeLabel(entry.waste_type)}: ${entry.ton_count}T${entry.truck_count}台`) ?? [],
     [report],
   );
   const transportRows = useMemo(
     () => report?.transport_entries.filter((entry) => entry.count > 0).map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.count}台`) ?? [],
     [report],
   );
+  const workerCostRows = useMemo(() => buildWorkerCostRows(report?.workers ?? [], workerLabels), [report?.workers, workerLabels]);
+  const workerCostTotal = useMemo(() => workerCostRows.reduce((sum, row) => sum + row.subtotal, 0), [workerCostRows]);
 
   return (
     <PageShell>
@@ -259,7 +306,9 @@ export function ReportDetailPage() {
       ) : editing && canEditReport ? (
         <ReportForm
           sites={sites}
+          workCategories={workCategories}
           workers={workers}
+          workerLabels={workerLabels}
           leaseItems={leaseItems}
           disposalItems={disposalItems}
           transportItems={transportItems}
@@ -280,6 +329,10 @@ export function ReportDetailPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作業日</p>
                   <p className="mt-1 font-semibold">{formatDate(report.report_date)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">工事分類</p>
+                  <p className="mt-1 font-semibold">{report.work_category?.name ?? "未設定"}</p>
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">勤務区分</p>
@@ -313,6 +366,15 @@ export function ReportDetailPage() {
               <ListSection title="車両・運搬" rows={transportRows} />
               <ListSection title="その他車両" rows={otherVehicleRows(report.other_vehicle_entries)} />
               <ListSection title="作業員" rows={groupedWorkerRows(report.workers)} />
+              {isMaster || masterOverride ? (
+                <ListSection
+                  title="作業員単価集計"
+                  rows={[
+                    ...workerCostRows.map((row) => `${row.label}: ${row.count}人 × ${row.unitPrice.toLocaleString()}円 = ${row.subtotal.toLocaleString()}円`),
+                    `合計: ${workerCostTotal.toLocaleString()}円`,
+                  ]}
+                />
+              ) : null}
               <DetailSection title="上記以外の従業員" value={report.other_workers_note} />
               <DetailSection title="備考" value={report.remarks} />
             </CardContent>

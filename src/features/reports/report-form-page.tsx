@@ -20,7 +20,9 @@ export function ReportFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
+  const [workCategories, setWorkCategories] = useState<MasterItem[]>([]);
   const [workers, setWorkers] = useState<MasterItem[]>([]);
+  const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
   const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
@@ -29,10 +31,12 @@ export function ReportFormPage() {
     setLoading(true);
     setError(null);
     try {
-      const [siteData, workerData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+      const [siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
         () => Promise.all([
           listSites(false),
+          listMasterItems("workCategory", false),
           listMasterItems("worker", false),
+          listMasterItems("workerLabel", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
@@ -41,7 +45,9 @@ export function ReportFormPage() {
         "日報入力の初期データ読み込みがタイムアウトしました。再度お試しください。",
       );
       setSites(siteData);
+      setWorkCategories(workCategoryData);
       setWorkers(workerData);
+      setWorkerLabels(workerLabelData);
       setLeaseItems(leaseData);
       setDisposalItems(disposalData);
       setTransportItems(transportData);
@@ -108,7 +114,9 @@ export function ReportFormPage() {
       ) : (
         <ReportForm
           sites={sites}
+          workCategories={workCategories}
           workers={workers}
+          workerLabels={workerLabels}
           leaseItems={leaseItems}
           disposalItems={disposalItems}
           transportItems={transportItems}

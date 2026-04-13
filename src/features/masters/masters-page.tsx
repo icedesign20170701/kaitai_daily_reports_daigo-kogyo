@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowDown, ArrowUp, GripVertical, Plus } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Plus } from "lucide-react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,6 +53,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 const masterSchema = z.object({
   name: z.string().min(1, "項目名を入力してください"),
   group_label: z.string().max(100, "100文字以内で入力してください").optional(),
+  unit_price: z.coerce.number().min(0, "0以上で入力してください").optional(),
   is_active: z.boolean(),
 });
 
@@ -60,23 +61,29 @@ type MasterFormValues = z.infer<typeof masterSchema>;
 
 const pageLabels: Record<MasterItemType, { title: string; description: string }> = {
   worker: { title: "作業員マスタ", description: "現場に入る作業員の一覧です。ラベルで会社や所属ごとに分けられます。" },
+  workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベルと1人あたり単価を管理します。" },
   lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
   disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },
   transport: { title: "車両・運搬マスタ", description: "2TC や乗用車など、使用する車両の一覧です。" },
+  workCategory: { title: "工事分類マスタ", description: "内装解体工事や土木工事など、工事分類を管理します。" },
 };
 
 const itemLabels: Record<MasterItemType, string> = {
   worker: "作業員",
+  workerLabel: "作業員ラベル",
   lease: "リース関係",
   disposal: "ゴミ処分",
   transport: "車両・運搬",
+  workCategory: "工事分類",
 };
 
 const routeTypeMap: Record<string, MasterItemType> = {
   workers: "worker",
+  "worker-labels": "workerLabel",
   "lease-items": "lease",
   "disposal-items": "disposal",
   "transport-items": "transport",
+  "work-categories": "workCategory",
 };
 
 export function MastersPage() {
@@ -89,6 +96,7 @@ export function MastersPage() {
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MasterItem | null>(null);
   const [items, setItems] = useState<MasterItem[]>([]);
+  const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 14 } }),
@@ -100,6 +108,7 @@ export function MastersPage() {
     defaultValues: {
       name: "",
       group_label: "",
+      unit_price: 0,
       is_active: true,
     },
   });
@@ -117,11 +126,15 @@ export function MastersPage() {
     setError(null);
     try {
       const data = await withSupabaseRecovery(
-        () => listMasterItems(masterType, false),
+        () =>
+          masterType === "worker"
+            ? Promise.all([listMasterItems(masterType, false), listMasterItems("workerLabel", false)])
+            : Promise.all([listMasterItems(masterType, false), Promise.resolve([] as MasterItem[])]),
         10000,
         `${itemLabel || "マスタ"}の読み込みがタイムアウトしました。再度お試しください。`,
       );
-      setItems(data);
+      setItems(data[0] ?? []);
+      setWorkerLabels(masterType === "worker" ? (data[1] ?? []) : []);
     } catch (nextError) {
       setError(getErrorMessage(nextError, "マスタ項目の取得に失敗しました"));
     } finally {
@@ -162,14 +175,14 @@ export function MastersPage() {
 
   const openCreate = () => {
     setEditingItem(null);
-    form.reset({ name: "", group_label: "", is_active: true });
+    form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });
     setDialogKey((current) => current + 1);
     setOpen(true);
   };
 
   const openEdit = (item: MasterItem) => {
     setEditingItem(item);
-    form.reset({ name: item.name, group_label: item.group_label ?? "", is_active: item.is_active });
+    form.reset({ name: item.name, group_label: item.group_label ?? "", unit_price: item.unit_price ?? 0, is_active: item.is_active });
     setDialogKey((current) => current + 1);
     setOpen(true);
   };
@@ -183,13 +196,14 @@ export function MastersPage() {
         id: editingItem?.id,
         name: values.name,
         group_label: masterType === "worker" ? values.group_label || null : null,
+        unit_price: masterType === "workerLabel" ? values.unit_price ?? 0 : null,
         sort_order: editingItem?.sort_order ?? items.length,
         is_active: values.is_active,
       });
       toast.success(editingItem ? "項目を更新しました" : "項目を追加しました");
       setOpen(false);
       setDialogKey((current) => current + 1);
-      form.reset({ name: "", group_label: "", is_active: true });
+      form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });
       await load({ silent: true });
     } catch (error) {
       toast.error(getErrorMessage(error, "保存に失敗しました"));
@@ -221,7 +235,7 @@ export function MastersPage() {
       setOpen(false);
       setEditingItem(null);
       setDialogKey((current) => current + 1);
-      form.reset({ name: "", group_label: "", is_active: true });
+      form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });
       await load({ silent: true });
     } catch (error) {
       toast.error(getErrorMessage(error, "削除に失敗しました"));
@@ -306,6 +320,7 @@ export function MastersPage() {
                   <p className="break-all text-base font-bold sm:text-lg">{item.name}</p>
                   <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
                   {masterType === "worker" && item.group_label ? <Badge variant="outline">{item.group_label}</Badge> : null}
+                  {masterType === "workerLabel" ? <Badge variant="outline">単価: {item.unit_price ?? 0}円</Badge> : null}
                 </div>
                 <p className="hidden text-sm text-muted-foreground md:block">
                   名前横のアイコンを長押しまたはドラッグして表示順を変更できます
@@ -374,7 +389,7 @@ export function MastersPage() {
                 if (!nextOpen) {
                   setDialogKey((current) => current + 1);
                   setEditingItem(null);
-                  form.reset({ name: "", group_label: "", is_active: true });
+                  form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });
                 }
               }}
             >
@@ -400,12 +415,29 @@ export function MastersPage() {
                 {masterType === "worker" ? (
                   <div className="space-y-2">
                     <Label htmlFor="master-group-label">ラベル</Label>
-                    <Input
-                      id="master-group-label"
-                      placeholder="例: 大吾興業"
-                      {...form.register("group_label")}
-                    />
-                    <p className="text-xs text-muted-foreground">※日報入力では同じラベルごとに作業員をまとめて表示しますので必ず同じ名前で登録をお願いします。</p>
+                    <div className="relative">
+                      <select
+                        id="master-group-label"
+                        className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                        value={form.watch("group_label") ?? ""}
+                        onChange={(event) => form.setValue("group_label", event.target.value, { shouldDirty: true })}
+                      >
+                        <option value="">ラベル未設定</option>
+                        {workerLabels.map((label) => (
+                          <option key={label.id} value={label.name}>
+                            {label.name}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">※ラベルは「作業員ラベルマスタ」で管理します。</p>
+                  </div>
+                ) : null}
+                {masterType === "workerLabel" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="master-unit-price">単価</Label>
+                    <Input id="master-unit-price" type="number" min={0} step={1} {...form.register("unit_price", { valueAsNumber: true })} />
                   </div>
                 ) : null}
                 <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
@@ -442,10 +474,10 @@ export function MastersPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
-          to="/masters/workers"
-          className={cn(buttonVariants({ variant: masterType === "worker" ? "default" : "outline", size: "sm" }))}
+          to="/masters/work-categories"
+          className={cn(buttonVariants({ variant: masterType === "workCategory" ? "default" : "outline", size: "sm" }))}
         >
-          作業員
+          工事分類
         </Link>
         <Link
           to="/masters/lease-items"
@@ -464,6 +496,18 @@ export function MastersPage() {
           className={cn(buttonVariants({ variant: masterType === "transport" ? "default" : "outline", size: "sm" }))}
         >
           車両・運搬
+        </Link>
+        <Link
+          to="/masters/worker-labels"
+          className={cn(buttonVariants({ variant: masterType === "workerLabel" ? "default" : "outline", size: "sm" }))}
+        >
+          作業員ラベル
+        </Link>
+        <Link
+          to="/masters/workers"
+          className={cn(buttonVariants({ variant: masterType === "worker" ? "default" : "outline", size: "sm" }))}
+        >
+          作業員
         </Link>
       </div>
 

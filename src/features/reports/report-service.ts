@@ -43,7 +43,7 @@ function mapJoinedItems<T extends string>(rows: Array<JoinedRow<T>>, key: T) {
 export async function listReports(filters: ReportListFilters = {}) {
   let query = supabase
     .from("daily_reports")
-    .select("*, sites(*)")
+    .select("*, sites(*), work_categories(*)")
     .order("report_date", { ascending: false })
     .order("created_at", { ascending: false });
 
@@ -69,17 +69,18 @@ export async function listReports(filters: ReportListFilters = {}) {
     ...(row as Omit<DailyReport, "other_vehicle_entries">),
     other_vehicle_entries: (((row as { other_vehicle_entries?: OtherVehicleEntry[] | null }).other_vehicle_entries ?? []) as OtherVehicleEntry[]),
     site: (row as { sites: Site | null }).sites,
+    work_category: (row as { work_categories?: MasterItem | null }).work_categories ?? null,
   })) as Array<DailyReport & { site: Site | null }>;
 }
 
 export async function getReportDetail(id: string): Promise<DailyReportDetail> {
   const [reportResult, workerResult, leaseResult, disposalResult, transportResult, photoResult, editLogResult] = await Promise.all([
-    supabase.from("daily_reports").select("*, sites(*)").eq("id", id).single(),
+    supabase.from("daily_reports").select("*, sites(*), work_categories(*)").eq("id", id).single(),
     supabase.from("daily_report_workers").select("workers(*)").eq("report_id", id),
-    supabase.from("daily_report_lease_items").select("id, lease_item_id, count, lease_items(*)").eq("report_id", id).order("created_at"),
+    supabase.from("daily_report_lease_items").select("id, lease_item_id, item_name, count, lease_items(*)").eq("report_id", id).order("created_at"),
     supabase
       .from("daily_report_disposal_items")
-      .select("id, disposal_item_id, ton_count, truck_count, disposal_items(*)")
+      .select("id, disposal_item_id, waste_type, other_label, ton_count, truck_count, disposal_items(*)")
       .eq("report_id", id)
       .order("created_at"),
     supabase
@@ -99,7 +100,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
   if (photoResult.error) throw photoResult.error;
   if (editLogResult.error) throw editLogResult.error;
 
-  const report = reportResult.data as Omit<DailyReport, "other_vehicle_entries"> & { sites: Site | null; other_vehicle_entries?: OtherVehicleEntry[] | null };
+  const report = reportResult.data as Omit<DailyReport, "other_vehicle_entries"> & { sites: Site | null; work_categories?: MasterItem | null; other_vehicle_entries?: OtherVehicleEntry[] | null };
   const editorIds = Array.from(new Set([report.created_by, ...((editLogResult.data ?? []) as Array<{ edited_by: string }>).map((log) => log.edited_by)]));
   const { data: appUsers } = await supabase.from("app_users").select("user_id, display_name").in("user_id", editorIds);
   const displayNameMap = new Map((appUsers ?? []).map((user) => [user.user_id, user.display_name ?? null]));
@@ -108,23 +109,29 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     ...report,
     other_vehicle_entries: (report.other_vehicle_entries ?? []) as OtherVehicleEntry[],
     site: report.sites,
+    work_category: report.work_categories ?? null,
     creator_display_name: displayNameMap.get(report.created_by) ?? null,
     workers: mapJoinedItems((workerResult.data ?? []) as Array<JoinedRow<"workers">>, "workers"),
-    lease_entries: ((leaseResult.data ?? []) as Array<{ id: string; lease_item_id: string; count: number; lease_items: MasterItem | MasterItem[] | null }>).map((row) => ({
+    lease_entries: ((leaseResult.data ?? []) as Array<{ id: string; lease_item_id: string | null; item_name: string | null; count: number; lease_items: MasterItem | MasterItem[] | null }>).map((row) => ({
       id: row.id,
       lease_item_id: row.lease_item_id,
+      label: row.item_name ?? normalizeJoinedItem(row.lease_items)?.name ?? "",
       count: row.count,
       item: normalizeJoinedItem(row.lease_items),
     })),
     disposal_entries: ((disposalResult.data ?? []) as Array<{
       id: string;
       disposal_item_id: string;
+      waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other";
+      other_label: string | null;
       ton_count: number;
       truck_count: number;
       disposal_items: MasterItem | MasterItem[] | null;
     }>).map((row) => ({
       id: row.id,
       disposal_item_id: row.disposal_item_id,
+      waste_type: row.waste_type,
+      other_label: row.other_label ?? "",
       ton_count: row.ton_count,
       truck_count: row.truck_count,
       item: normalizeJoinedItem(row.disposal_items),
@@ -157,6 +164,7 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
   const { data, error } = await supabase.rpc("save_daily_report", {
     p_report_id: reportId ?? null,
     p_site_id: values.site_id,
+    p_work_category_id: values.work_category_id,
     p_report_date: values.report_date,
     p_worker_count: values.worker_count,
     p_work_shift: values.work_shift,

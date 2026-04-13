@@ -19,7 +19,7 @@ const SelectTrigger = React.forwardRef<
     {...props}
   >
     {children}
-    <SelectPrimitive.Icon className="ml-2 shrink-0">
+    <SelectPrimitive.Icon className="ml-1.5 -mr-0.5 shrink-0">
       <ChevronDown className="h-4 w-4 opacity-70" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>

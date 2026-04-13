@@ -12,17 +12,19 @@ export type Site = BaseRow & {
   is_active: boolean;
 };
 
-export type MasterItemType = "worker" | "lease" | "disposal" | "transport";
+export type MasterItemType = "worker" | "workerLabel" | "lease" | "disposal" | "transport" | "workCategory";
 
 export type MasterItem = BaseRow & {
   name: string;
   group_label?: string | null;
+  unit_price?: number | null;
   sort_order: number;
   is_active: boolean;
 };
 
 export type DailyReport = BaseRow & {
   site_id: Id;
+  work_category_id: Id | null;
   report_date: string;
   worker_count: number;
   work_shift: "day" | "night";
@@ -37,7 +39,8 @@ export type DailyReport = BaseRow & {
 
 export type ReportLeaseEntry = {
   id?: Id;
-  lease_item_id: Id;
+  lease_item_id?: Id | null;
+  label: string;
   count: number;
   item?: MasterItem | null;
 };
@@ -45,6 +48,8 @@ export type ReportLeaseEntry = {
 export type ReportDisposalEntry = {
   id?: Id;
   disposal_item_id: Id;
+  waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other";
+  other_label: string;
   ton_count: number;
   truck_count: number;
   item?: MasterItem | null;
@@ -88,6 +93,7 @@ export type ReportEditLog = {
 
 export type DailyReportDetail = DailyReport & {
   site: Site | null;
+  work_category?: MasterItem | null;
   creator_display_name?: string | null;
   workers: MasterItem[];
   lease_entries: ReportLeaseEntry[];
@@ -100,6 +106,7 @@ export type DailyReportDetail = DailyReport & {
 export type ReportFormValues = {
   report_date: string;
   site_id: string;
+  work_category_id: string;
   worker_count: number;
   worker_ids: string[];
   work_shift: "day" | "night";

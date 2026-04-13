@@ -75,6 +75,11 @@ export type AppUser = {
   created_at: string;
 };
 
+export type ReportWorker = MasterItem & {
+  label_snapshot?: string | null;
+  unit_price_snapshot?: number | null;
+};
+
 export type ReportPhoto = {
   id: Id;
   report_id: Id;
@@ -95,7 +100,7 @@ export type DailyReportDetail = DailyReport & {
   site: Site | null;
   work_category?: MasterItem | null;
   creator_display_name?: string | null;
-  workers: MasterItem[];
+  workers: ReportWorker[];
   lease_entries: ReportLeaseEntry[];
   disposal_entries: ReportDisposalEntry[];
   transport_entries: ReportTransportEntry[];

@@ -16,7 +16,7 @@ import { listSites } from "@/features/sites/site-service";
 import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
-import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, Site } from "@/types/database";
+import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, ReportWorker, Site } from "@/types/database";
 
 function DetailSection({ title, value, emptyLabel = "未入力" }: { title: string; value: string | null | undefined; emptyLabel?: string }) {
   return (
@@ -38,10 +38,10 @@ function ListSection({ title, rows }: { title: string; rows: string[] }) {
   );
 }
 
-function groupedWorkerRows(workers: MasterItem[]) {
+function groupedWorkerRows(workers: ReportWorker[]) {
   const map = new Map<string, string[]>();
   workers.forEach((worker) => {
-    const label = worker.group_label?.trim() || "ラベル未設定";
+    const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
     const list = map.get(label) ?? [];
     list.push(worker.name);
     map.set(label, list);
@@ -49,13 +49,13 @@ function groupedWorkerRows(workers: MasterItem[]) {
   return Array.from(map.entries()).map(([label, names]) => `${label}: ${names.join(" / ")}`);
 }
 
-function buildWorkerCostRows(workers: MasterItem[], workerLabels: MasterItem[]) {
+function buildWorkerCostRows(workers: ReportWorker[], workerLabels: MasterItem[]) {
   const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
   const grouped = new Map<string, { count: number; unitPrice: number }>();
 
   workers.forEach((worker) => {
-    const label = worker.group_label?.trim() || "ラベル未設定";
-    const current = grouped.get(label) ?? { count: 0, unitPrice: labelPriceMap.get(label) ?? 0 };
+    const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
+    const current = grouped.get(label) ?? { count: 0, unitPrice: worker.unit_price_snapshot ?? labelPriceMap.get(label) ?? 0 };
     current.count += 1;
     grouped.set(label, current);
   });

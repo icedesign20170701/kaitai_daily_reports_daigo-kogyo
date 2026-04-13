@@ -9,6 +9,7 @@ import type {
   ReportFormValues,
   ReportListFilters,
   ReportPhoto,
+  ReportWorker,
   Site,
 } from "@/types/database";
 
@@ -17,27 +18,11 @@ export type SaveReportResult = {
   uploadErrors: string[];
 };
 
-type JoinedRow<T extends string> = {
-  [K in T]: MasterItem | MasterItem[] | null;
-};
-
 function normalizeJoinedItem(value: MasterItem | MasterItem[] | null | undefined) {
   if (!value) {
     return null;
   }
   return Array.isArray(value) ? (value[0] ?? null) : value;
-}
-
-function mapJoinedItems<T extends string>(rows: Array<JoinedRow<T>>, key: T) {
-  return rows
-    .flatMap((row) => {
-      const value = row[key];
-      if (!value) {
-        return [];
-      }
-      return Array.isArray(value) ? value : [value];
-    })
-    .filter(Boolean) as MasterItem[];
 }
 
 export async function listReports(filters: ReportListFilters = {}) {
@@ -65,18 +50,26 @@ export async function listReports(filters: ReportListFilters = {}) {
     throw error;
   }
 
+  const creatorIds = Array.from(new Set((data ?? []).map((row) => (row as { created_by: string }).created_by)));
+  const { data: appUsers } =
+    creatorIds.length > 0
+      ? await supabase.from("app_users").select("user_id, display_name").in("user_id", creatorIds)
+      : { data: [] as Array<{ user_id: string; display_name: string | null }> };
+  const displayNameMap = new Map((appUsers ?? []).map((item) => [item.user_id, item.display_name ?? null]));
+
   return (data ?? []).map((row) => ({
     ...(row as Omit<DailyReport, "other_vehicle_entries">),
     other_vehicle_entries: (((row as { other_vehicle_entries?: OtherVehicleEntry[] | null }).other_vehicle_entries ?? []) as OtherVehicleEntry[]),
     site: (row as { sites: Site | null }).sites,
     work_category: (row as { work_categories?: MasterItem | null }).work_categories ?? null,
-  })) as Array<DailyReport & { site: Site | null }>;
+    creator_display_name: displayNameMap.get((row as { created_by: string }).created_by) ?? null,
+  })) as Array<DailyReport & { site: Site | null; creator_display_name?: string | null }>;
 }
 
 export async function getReportDetail(id: string): Promise<DailyReportDetail> {
   const [reportResult, workerResult, leaseResult, disposalResult, transportResult, photoResult, editLogResult] = await Promise.all([
     supabase.from("daily_reports").select("*, sites(*), work_categories(*)").eq("id", id).single(),
-    supabase.from("daily_report_workers").select("workers(*)").eq("report_id", id),
+    supabase.from("daily_report_workers").select("label_snapshot, unit_price_snapshot, workers(*)").eq("report_id", id),
     supabase.from("daily_report_lease_items").select("id, lease_item_id, item_name, count, lease_items(*)").eq("report_id", id).order("created_at"),
     supabase
       .from("daily_report_disposal_items")
@@ -111,7 +104,23 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     site: report.sites,
     work_category: report.work_categories ?? null,
     creator_display_name: displayNameMap.get(report.created_by) ?? null,
-    workers: mapJoinedItems((workerResult.data ?? []) as Array<JoinedRow<"workers">>, "workers"),
+    workers: ((workerResult.data ?? []) as Array<{
+      label_snapshot: string | null;
+      unit_price_snapshot: number | null;
+      workers: MasterItem | MasterItem[] | null;
+    }>)
+      .map((row) => {
+        const worker = normalizeJoinedItem(row.workers);
+        if (!worker) {
+          return null;
+        }
+        return {
+          ...worker,
+          label_snapshot: row.label_snapshot,
+          unit_price_snapshot: row.unit_price_snapshot,
+        } satisfies ReportWorker;
+      })
+      .filter(Boolean) as ReportWorker[],
     lease_entries: ((leaseResult.data ?? []) as Array<{ id: string; lease_item_id: string | null; item_name: string | null; count: number; lease_items: MasterItem | MasterItem[] | null }>).map((row) => ({
       id: row.id,
       lease_item_id: row.lease_item_id,

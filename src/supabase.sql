@@ -100,9 +100,17 @@ create table if not exists public.daily_report_workers (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references public.daily_reports(id) on delete cascade,
   worker_id uuid not null references public.workers(id),
+  label_snapshot text,
+  unit_price_snapshot integer not null default 0,
   created_at timestamptz not null default now(),
   unique (report_id, worker_id)
 );
+
+alter table public.daily_report_workers
+  add column if not exists label_snapshot text;
+
+alter table public.daily_report_workers
+  add column if not exists unit_price_snapshot integer not null default 0;
 
 create table if not exists public.daily_report_lease_items (
   id uuid primary key default gen_random_uuid(),
@@ -292,11 +300,33 @@ begin
     v_report_id := p_report_id;
   end if;
 
+  if coalesce(array_length(p_worker_ids, 1), 0) > 0 then
+    create temporary table if not exists tmp_existing_worker_snapshots (
+      worker_id uuid primary key,
+      label_snapshot text,
+      unit_price_snapshot integer
+    ) on commit drop;
+
+    truncate table tmp_existing_worker_snapshots;
+
+    insert into tmp_existing_worker_snapshots (worker_id, label_snapshot, unit_price_snapshot)
+    select worker_id, label_snapshot, unit_price_snapshot
+    from public.daily_report_workers
+    where report_id = v_report_id;
+  end if;
+
   delete from public.daily_report_workers where report_id = v_report_id;
   if coalesce(array_length(p_worker_ids, 1), 0) > 0 then
-    insert into public.daily_report_workers (report_id, worker_id)
-    select v_report_id, worker_id
-    from unnest(p_worker_ids) as worker_id;
+    insert into public.daily_report_workers (report_id, worker_id, label_snapshot, unit_price_snapshot)
+    select
+      v_report_id,
+      worker.id,
+      coalesce(existing.label_snapshot, worker.group_label),
+      coalesce(existing.unit_price_snapshot, worker_label.unit_price, 0)
+    from unnest(p_worker_ids) as input_worker(worker_id)
+    join public.workers as worker on worker.id = input_worker.worker_id
+    left join tmp_existing_worker_snapshots as existing on existing.worker_id = worker.id
+    left join public.worker_labels as worker_label on worker_label.name = worker.group_label;
   end if;
 
   delete from public.daily_report_lease_items where report_id = v_report_id;

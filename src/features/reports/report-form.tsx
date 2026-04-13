@@ -26,6 +26,7 @@ import type {
   ReportLeaseEntry,
   ReportPhoto,
   ReportTransportEntry,
+  ReportWorker,
   Site,
 } from "@/types/database";
 
@@ -337,6 +338,28 @@ function WorkerCostSummary({
       </div>
     </div>
   );
+}
+
+function buildWorkerCostSummaryRows(workers: ReportWorker[], workerIds: string[], workerLabels: MasterItem[]) {
+  const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
+  const grouped = new Map<string, { count: number; unitPrice: number }>();
+
+  workers
+    .filter((worker) => workerIds.includes(worker.id))
+    .forEach((worker) => {
+      const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
+      const unitPrice = worker.unit_price_snapshot ?? labelPriceMap.get(label) ?? 0;
+      const current = grouped.get(label) ?? { count: 0, unitPrice };
+      current.count += 1;
+      grouped.set(label, current);
+    });
+
+  return Array.from(grouped.entries()).map(([label, value]) => ({
+    label,
+    count: value.count,
+    unitPrice: value.unitPrice,
+    subtotal: value.count * value.unitPrice,
+  }));
 }
 
 function QuantitySelect({
@@ -682,29 +705,7 @@ export function ReportForm({
     return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
   }, [workers]);
 
-  const workerCostSummary = useMemo(() => {
-    if (!isMaster) {
-      return [];
-    }
-
-    const selectedWorkers = workers.filter((worker) => workerIds.includes(worker.id));
-    const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
-    const grouped = new Map<string, { count: number; unitPrice: number }>();
-
-    selectedWorkers.forEach((worker) => {
-      const label = worker.group_label?.trim() || "ラベル未設定";
-      const current = grouped.get(label) ?? { count: 0, unitPrice: labelPriceMap.get(label) ?? 0 };
-      current.count += 1;
-      grouped.set(label, current);
-    });
-
-    return Array.from(grouped.entries()).map(([label, value]) => ({
-      label,
-      count: value.count,
-      unitPrice: value.unitPrice,
-      subtotal: value.count * value.unitPrice,
-    }));
-  }, [isMaster, workerIds, workerLabels, workers]);
+  const workerCostSummary = useMemo(() => (isMaster ? buildWorkerCostSummaryRows(workers as ReportWorker[], workerIds, workerLabels) : []), [isMaster, workerIds, workerLabels, workers]);
 
   const previewPhotos = useMemo(
     () =>

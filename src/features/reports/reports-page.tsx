@@ -22,7 +22,7 @@ import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
 import type { AppUser, DailyReport, Site } from "@/types/database";
 
-type ReportListRow = DailyReport & { site: Site | null };
+type ReportListRow = DailyReport & { site: Site | null; creator_display_name?: string | null };
 
 function DateFilterField({
   id,
@@ -125,7 +125,7 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 }
 
 export function ReportsPage() {
-  const { user, appUser } = useAuth();
+  const { user, appUser, isMaster } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -233,7 +233,7 @@ export function ReportsPage() {
 
   const handleExportCsv = async () => {
     try {
-      await exportReportsCsv(reports);
+      await exportReportsCsv(reports, { includeCosts: isMaster });
       toast.success("CSVを出力しました");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "CSV出力に失敗しました");
@@ -408,6 +408,7 @@ export function ReportsPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             区分: {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
                           </p>
+                          <p className="text-sm text-muted-foreground">作成者: {report.creator_display_name ?? "未設定"}</p>
                           <p className="text-sm text-muted-foreground">人数: {report.worker_count}人</p>
                         </div>
                       </div>
@@ -434,9 +435,10 @@ export function ReportsPage() {
                       <TableRow>
                         <TableHead className="w-[28%] min-w-[180px]">現場名</TableHead>
                         <TableHead className="w-[18%] min-w-[140px]">区分</TableHead>
+                        <TableHead className="w-[14%] min-w-[120px]">作成者</TableHead>
                         <TableHead className="w-[10%] min-w-[76px]">人数</TableHead>
                         <TableHead className="w-[10%] min-w-[92px]">進捗</TableHead>
-                        <TableHead className="w-[24%] min-w-[180px]">備考</TableHead>
+                        <TableHead className="w-[18%] min-w-[180px]">備考</TableHead>
                         <TableHead className="w-[120px]">詳細</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -448,6 +450,9 @@ export function ReportsPage() {
                           </TableCell>
                           <TableCell className="whitespace-nowrap">
                             {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
+                          </TableCell>
+                          <TableCell className="max-w-0">
+                            <span className="block truncate">{report.creator_display_name ?? "未設定"}</span>
                           </TableCell>
                           <TableCell className="whitespace-nowrap">{report.worker_count}人</TableCell>
                           <TableCell className="whitespace-nowrap">

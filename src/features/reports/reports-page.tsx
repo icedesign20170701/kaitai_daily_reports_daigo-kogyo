@@ -408,21 +408,12 @@ export function ReportsPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             区分: {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
                           </p>
+                          <p className="text-sm text-muted-foreground">工事分類: {report.work_category?.name ?? "未設定"}</p>
                           <p className="text-sm text-muted-foreground">作成者: {report.creator_display_name ?? "未設定"}</p>
                           <p className="text-sm text-muted-foreground">人数: {report.worker_count}人</p>
                         </div>
                       </div>
-                      <p
-                        className="mt-3 text-sm leading-6 text-muted-foreground"
-                        style={{
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {report.remarks || "備考なし"}
-                      </p>
+                      <p className="mt-3 text-sm leading-6 text-muted-foreground">{report.remarks ? "備考: 記載あり" : "備考: -"}</p>
                     </Link>
                   ))}
                 </CardContent>
@@ -434,11 +425,12 @@ export function ReportsPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[28%] min-w-[180px]">現場名</TableHead>
-                        <TableHead className="w-[16%] min-w-[124px]">区分</TableHead>
+                        <TableHead className="w-[14%] min-w-[116px]">工事分類</TableHead>
+                        <TableHead className="w-[14%] min-w-[116px]">区分</TableHead>
                         <TableHead className="w-[14%] min-w-[120px]">作成者</TableHead>
                         <TableHead className="w-[10%] min-w-[76px]">人数</TableHead>
                         <TableHead className="w-[10%] min-w-[92px]">進捗</TableHead>
-                        <TableHead className="w-[20%] min-w-[180px]">備考</TableHead>
+                        <TableHead className="w-[10%] min-w-[92px]">備考</TableHead>
                         <TableHead className="w-[96px] min-w-[96px]">詳細</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -447,6 +439,9 @@ export function ReportsPage() {
                         <TableRow key={report.id} className={cn(index % 2 === 1 && "bg-secondary/20")}>
                           <TableCell className="max-w-0">
                             <span className="block truncate">{report.site?.name ?? "-"}</span>
+                          </TableCell>
+                          <TableCell className="max-w-0">
+                            <span className="block truncate">{report.work_category?.name ?? "-"}</span>
                           </TableCell>
                           <TableCell className="whitespace-nowrap">
                             {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
@@ -458,9 +453,7 @@ export function ReportsPage() {
                           <TableCell className="whitespace-nowrap">
                             <ProgressBadge status={report.progress_status} />
                           </TableCell>
-                          <TableCell className="max-w-0">
-                            <span className="block truncate">{report.remarks ?? "-"}</span>
-                          </TableCell>
+                          <TableCell className="whitespace-nowrap">{report.remarks ? "記載あり" : "-"}</TableCell>
                           <TableCell className="whitespace-nowrap">
                             <Link
                               to={`/reports/${report.id}`}

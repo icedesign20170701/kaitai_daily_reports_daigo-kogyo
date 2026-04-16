@@ -54,6 +54,7 @@ function triggerResumeReload() {
 export function RuntimeRecovery() {
   useEffect(() => {
     let hiddenAt: number | null = null;
+    let lastResumeHandledAt = 0;
 
     const handleErrorEvent = (event: ErrorEvent) => {
       const message = event.error instanceof Error ? event.error.message : event.message ?? "";
@@ -75,31 +76,53 @@ export function RuntimeRecovery() {
       }
     };
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        hiddenAt = Date.now();
-        return;
-      }
+    const markHidden = () => {
+      hiddenAt = Date.now();
+    };
 
+    const handleResume = () => {
       if (!hiddenAt) {
         return;
       }
 
-      const hiddenDuration = Date.now() - hiddenAt;
+      const now = Date.now();
+      if (now - lastResumeHandledAt < 500) {
+        return;
+      }
+
+      const hiddenDuration = now - hiddenAt;
       hiddenAt = null;
+      lastResumeHandledAt = now;
 
       if (hiddenDuration >= APP_RESUME_RELOAD_THRESHOLD_MS && window.location.pathname !== "/login") {
         triggerResumeReload();
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        markHidden();
+        return;
+      }
+
+      handleResume();
+    };
+
     window.addEventListener("error", handleErrorEvent);
     window.addEventListener("unhandledrejection", handleRejection);
+    window.addEventListener("pagehide", markHidden);
+    window.addEventListener("blur", markHidden);
+    window.addEventListener("focus", handleResume);
+    window.addEventListener("pageshow", handleResume);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.removeEventListener("error", handleErrorEvent);
       window.removeEventListener("unhandledrejection", handleRejection);
+      window.removeEventListener("pagehide", markHidden);
+      window.removeEventListener("blur", markHidden);
+      window.removeEventListener("focus", handleResume);
+      window.removeEventListener("pageshow", handleResume);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);

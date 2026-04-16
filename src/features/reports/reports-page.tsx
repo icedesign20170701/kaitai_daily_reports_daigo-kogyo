@@ -127,6 +127,7 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 export function ReportsPage() {
   const { user, appUser, isMaster } = useAuth();
   const hiddenAtRef = useRef<number | null>(null);
+  const resumeReloadedRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -191,6 +192,11 @@ export function ReportsPage() {
       }
       const hiddenAt = hiddenAtRef.current;
       const resumedAfterMs = hiddenAt ? Date.now() - hiddenAt : 0;
+      if (resumedAfterMs >= 1500 && !resumeReloadedRef.current) {
+        resumeReloadedRef.current = true;
+        window.location.reload();
+        return;
+      }
       if (!loading && !error && resumedAfterMs < 1500) {
         return;
       }
@@ -202,6 +208,7 @@ export function ReportsPage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         hiddenAtRef.current = Date.now();
+        resumeReloadedRef.current = false;
         return;
       }
       reloadAfterResume();

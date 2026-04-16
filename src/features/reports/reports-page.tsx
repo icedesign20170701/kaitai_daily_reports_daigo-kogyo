@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -126,6 +126,7 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 
 export function ReportsPage() {
   const { user, appUser, isMaster } = useAuth();
+  const hiddenAtRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -162,10 +163,14 @@ export function ReportsPage() {
     }
   }, [filters]);
 
-  useEffect(() => {
+  const loadFilterOptions = useCallback(() => {
     void withSupabaseRecovery(() => listSites(true), 6000).then(setSites).catch(() => undefined);
     void withSupabaseRecovery(() => listAppUsers(), 6000).then(setAppUsers).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    loadFilterOptions();
+  }, [loadFilterOptions]);
 
   useEffect(() => {
     setFilters((current) => ({
@@ -180,29 +185,38 @@ export function ReportsPage() {
   }, [loadReports]);
 
   useEffect(() => {
-    const retryIfStillLoading = () => {
-      if (document.visibilityState === "hidden" || !loading) {
+    const reloadAfterResume = () => {
+      if (document.visibilityState === "hidden") {
         return;
       }
+      const hiddenAt = hiddenAtRef.current;
+      const resumedAfterMs = hiddenAt ? Date.now() - hiddenAt : 0;
+      if (!loading && !error && resumedAfterMs < 1500) {
+        return;
+      }
+      hiddenAtRef.current = null;
+      loadFilterOptions();
       void loadReports();
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        retryIfStillLoading();
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
       }
+      reloadAfterResume();
     };
 
-    window.addEventListener("focus", retryIfStillLoading);
-    window.addEventListener("pageshow", retryIfStillLoading);
+    window.addEventListener("focus", reloadAfterResume);
+    window.addEventListener("pageshow", reloadAfterResume);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      window.removeEventListener("focus", retryIfStillLoading);
-      window.removeEventListener("pageshow", retryIfStillLoading);
+      window.removeEventListener("focus", reloadAfterResume);
+      window.removeEventListener("pageshow", reloadAfterResume);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadReports, loading]);
+  }, [error, loadFilterOptions, loadReports, loading]);
 
   const summary = useMemo(() => {
     const totalWorkers = reports.reduce((sum, report) => sum + report.worker_count, 0);

@@ -400,6 +400,9 @@ export function ReportsPage() {
                   {group.items.map((report) => (
                     <Link key={report.id} to={`/reports/${report.id}`} className="block rounded-xl border bg-background p-4">
                       <div className="space-y-3">
+                        <div className="flex items-start gap-2">
+                          <ProgressBadge status={report.progress_status} />
+                        </div>
                         <div className="min-w-0">
                           <p className="truncate font-bold">{report.site?.name ?? "現場未設定"}</p>
                           <p className="mt-1 text-sm text-muted-foreground">工事分類: {report.work_category?.name ?? "未設定"}</p>
@@ -408,9 +411,6 @@ export function ReportsPage() {
                           </p>
                           <p className="text-sm text-muted-foreground">作成者: {report.creator_display_name ?? "未設定"}</p>
                           <p className="text-sm text-muted-foreground">人数: {report.worker_count}人</p>
-                          <div className="mt-2">
-                            <ProgressBadge status={report.progress_status} />
-                          </div>
                         </div>
                       </div>
                       <p className="mt-3 text-sm leading-6 text-muted-foreground">{report.remarks ? "備考: 記載あり" : "備考: -"}</p>

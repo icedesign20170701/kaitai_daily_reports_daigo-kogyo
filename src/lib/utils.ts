@@ -1,6 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { resetSupabaseClient, supabase } from "@/lib/supabase";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -55,6 +54,12 @@ export async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number,
   }
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 function isRecoverableLoadError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
@@ -82,15 +87,7 @@ export async function withSupabaseRecovery<T>(
     if (!isRecoverableLoadError(error)) {
       throw error;
     }
-
-    resetSupabaseClient();
-
-    try {
-      await supabase.auth.getSession();
-    } catch {
-      // Session restore is best-effort. A second failure will be surfaced by the retried loader.
-    }
-
+    await sleep(250);
     return withTimeout(Promise.resolve(loader()), timeoutMs, message);
   }
 }

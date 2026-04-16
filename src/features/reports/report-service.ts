@@ -5,6 +5,7 @@ import type {
   DailyReportDetail,
   MasterItem,
   OtherVehicleEntry,
+  ReportExternalWorkerEntry,
   ReportEditLog,
   ReportFormValues,
   ReportListFilters,
@@ -62,14 +63,16 @@ export async function listReports(filters: ReportListFilters = {}) {
     other_vehicle_entries: (((row as { other_vehicle_entries?: OtherVehicleEntry[] | null }).other_vehicle_entries ?? []) as OtherVehicleEntry[]),
     site: (row as { sites: Site | null }).sites,
     work_category: (row as { work_categories?: MasterItem | null }).work_categories ?? null,
+    reporter_name: (row as { reporter_name?: string | null }).reporter_name ?? null,
     creator_display_name: displayNameMap.get((row as { created_by: string }).created_by) ?? null,
   })) as Array<DailyReport & { site: Site | null; creator_display_name?: string | null }>;
 }
 
 export async function getReportDetail(id: string): Promise<DailyReportDetail> {
-  const [reportResult, workerResult, leaseResult, disposalResult, transportResult, photoResult, editLogResult] = await Promise.all([
+  const [reportResult, workerResult, externalWorkerResult, leaseResult, disposalResult, transportResult, photoResult, editLogResult] = await Promise.all([
     supabase.from("daily_reports").select("*, sites(*), work_categories(*)").eq("id", id).single(),
     supabase.from("daily_report_workers").select("label_snapshot, unit_price_snapshot, workers(*)").eq("report_id", id),
+    supabase.from("daily_report_external_workers").select("id, worker_label_id, label_snapshot, count, unit_price_snapshot, worker_labels(*)").eq("report_id", id),
     supabase.from("daily_report_lease_items").select("id, lease_item_id, item_name, count, lease_items(*)").eq("report_id", id).order("created_at"),
     supabase
       .from("daily_report_disposal_items")
@@ -87,6 +90,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
 
   if (reportResult.error) throw reportResult.error;
   if (workerResult.error) throw workerResult.error;
+  if (externalWorkerResult.error) throw externalWorkerResult.error;
   if (leaseResult.error) throw leaseResult.error;
   if (disposalResult.error) throw disposalResult.error;
   if (transportResult.error) throw transportResult.error;
@@ -103,6 +107,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     other_vehicle_entries: (report.other_vehicle_entries ?? []) as OtherVehicleEntry[],
     site: report.sites,
     work_category: report.work_categories ?? null,
+    reporter_name: report.reporter_name ?? null,
     creator_display_name: displayNameMap.get(report.created_by) ?? null,
     workers: ((workerResult.data ?? []) as Array<{
       label_snapshot: string | null;
@@ -121,6 +126,21 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
         } satisfies ReportWorker;
       })
       .filter(Boolean) as ReportWorker[],
+    external_worker_entries: ((externalWorkerResult.data ?? []) as Array<{
+      id: string;
+      worker_label_id: string;
+      label_snapshot: string;
+      count: number;
+      unit_price_snapshot: number;
+      worker_labels: MasterItem | MasterItem[] | null;
+    }>).map((row) => ({
+      id: row.id,
+      worker_label_id: row.worker_label_id,
+      label_snapshot: row.label_snapshot,
+      count: row.count,
+      unit_price_snapshot: row.unit_price_snapshot,
+      item: normalizeJoinedItem(row.worker_labels),
+    })) as ReportExternalWorkerEntry[],
     lease_entries: ((leaseResult.data ?? []) as Array<{ id: string; lease_item_id: string | null; item_name: string | null; count: number; lease_items: MasterItem | MasterItem[] | null }>).map((row) => ({
       id: row.id,
       lease_item_id: row.lease_item_id,
@@ -175,15 +195,18 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
     p_site_id: values.site_id,
     p_work_category_id: values.work_category_id,
     p_report_date: values.report_date,
+    p_reporter_name: values.reporter_name || null,
     p_worker_count: values.worker_count,
     p_work_shift: values.work_shift,
     p_contract_type: values.contract_type,
     p_miscellaneous_costs: values.miscellaneous_costs || null,
     p_other_vehicle_entries: otherVehicleEntries,
+    p_work_description: values.work_description || null,
     p_other_workers_note: values.other_workers_note || null,
     p_remarks: values.remarks || null,
     p_progress_status: values.progress_status,
     p_worker_ids: values.worker_ids,
+    p_external_worker_entries: values.external_worker_entries,
     p_lease_entries: values.lease_entries,
     p_disposal_entries: values.disposal_entries,
     p_transport_entries: values.transport_entries,

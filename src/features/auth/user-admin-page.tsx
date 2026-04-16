@@ -42,6 +42,7 @@ import type { AppUser } from "@/types/database";
 const userSchema = z.object({
   display_name: z.string().trim().min(1, "表示名を入力してください").max(50, "50文字以内で入力してください"),
   is_master: z.boolean(),
+  is_subcontractor: z.boolean(),
 });
 
 type UserFormValues = z.infer<typeof userSchema>;
@@ -72,6 +73,7 @@ export function UserAdminPage() {
     defaultValues: {
       display_name: "",
       is_master: false,
+      is_subcontractor: false,
     },
   });
 
@@ -134,6 +136,7 @@ export function UserAdminPage() {
     form.reset({
       display_name: user.display_name ?? "",
       is_master: user.is_master,
+      is_subcontractor: user.is_subcontractor,
     });
     setOpen(true);
   };
@@ -150,6 +153,7 @@ export function UserAdminPage() {
         .update({
           display_name: values.display_name,
           is_master: values.is_master,
+          is_subcontractor: values.is_subcontractor,
           sort_order: editingUser.sort_order,
         })
         .eq("user_id", editingUser.user_id);
@@ -242,6 +246,7 @@ export function UserAdminPage() {
                 </button>
                 <p className="font-bold">{currentUser.display_name || "未設定"}</p>
                 <Badge variant={currentUser.is_master ? "default" : "outline"}>{currentUser.is_master ? "マスター" : "一般"}</Badge>
+                {currentUser.is_subcontractor ? <Badge variant="secondary">外注業社</Badge> : null}
               </div>
               <p className="text-xs text-muted-foreground">{currentUser.user_id}</p>
             </div>
@@ -320,7 +325,7 @@ export function UserAdminPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>アカウント編集</DialogTitle>
-            <DialogDescription>表示名とマスター権限を更新します。</DialogDescription>
+            <DialogDescription>表示名、マスター権限、外注業社権限を更新します。</DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
@@ -334,6 +339,10 @@ export function UserAdminPage() {
                 <Shield className="h-4 w-4" />
                 マスターアカウントにする
               </span>
+            </label>
+            <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
+              <input type="checkbox" className="h-4 w-4" {...form.register("is_subcontractor")} />
+              <span>外注業社権限を付与する</span>
             </label>
             <Button type="submit" className="w-full" disabled={saving}>
               {saving ? "保存中..." : "保存する"}

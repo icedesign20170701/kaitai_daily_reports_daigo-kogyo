@@ -15,7 +15,7 @@ import type { MasterItem, Site } from "@/types/database";
 
 export function ReportFormPage() {
   const navigate = useNavigate();
-  const { user, appUser } = useAuth();
+  const { user, appUser, isSubcontractor } = useAuth();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +121,7 @@ export function ReportFormPage() {
           disposalItems={disposalItems}
           transportItems={transportItems}
           reporterName={appUser?.display_name ?? null}
+          isSubcontractor={isSubcontractor}
           submitting={submitting}
           onSubmit={handleSubmit}
         />

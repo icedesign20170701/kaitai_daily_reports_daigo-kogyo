@@ -423,7 +423,7 @@ export function ReportsPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             区分: {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
                           </p>
-                          <p className="text-sm text-muted-foreground">作成者: {report.creator_display_name ?? "未設定"}</p>
+                          <p className="text-sm text-muted-foreground">作成者: {report.reporter_name ?? report.creator_display_name ?? "未設定"}</p>
                           <p className="text-sm text-muted-foreground">人数: {report.worker_count}人</p>
                         </div>
                       </div>
@@ -461,7 +461,7 @@ export function ReportsPage() {
                             {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
                           </TableCell>
                           <TableCell className="max-w-0">
-                            <span className="block truncate">{report.creator_display_name ?? "未設定"}</span>
+                            <span className="block truncate">{report.reporter_name ?? report.creator_display_name ?? "未設定"}</span>
                           </TableCell>
                           <TableCell className="whitespace-nowrap">{report.worker_count}人</TableCell>
                           <TableCell className="whitespace-nowrap">

@@ -47,6 +47,7 @@ export function ProfilePage() {
         user_id: user.id,
         display_name: values.display_name,
         is_master: appUser?.is_master ?? false,
+        is_subcontractor: appUser?.is_subcontractor ?? false,
       });
 
       if (error) {

@@ -28,7 +28,7 @@ export async function listAppUsers() {
 
   const { data, error } = await supabase
     .from("app_users")
-    .select("user_id, display_name, is_master, sort_order, created_at")
+    .select("user_id, display_name, is_master, is_subcontractor, sort_order, created_at")
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -44,6 +44,7 @@ export async function reorderAppUsers(users: AppUser[]) {
     user_id: user.user_id,
     display_name: user.display_name,
     is_master: user.is_master,
+    is_subcontractor: user.is_subcontractor,
     sort_order: index,
   }));
 

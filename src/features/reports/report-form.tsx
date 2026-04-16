@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type FieldErrors, useFieldArray, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import { z } from "zod";
@@ -22,6 +22,7 @@ import type {
   MasterItem,
   OtherVehicleEntry,
   ReportDisposalEntry,
+  ReportExternalWorkerEntry,
   ReportFormValues,
   ReportLeaseEntry,
   ReportPhoto,
@@ -31,21 +32,31 @@ import type {
 } from "@/types/database";
 
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
+const subcontractorCountOptions = Array.from({ length: 21 }, (_, index) => index);
 const disposalTypeOptions = [
   { value: "wood", label: "木類" },
   { value: "board", label: "ボード" },
   { value: "rubble", label: "ガラ" },
   { value: "scrap", label: "スクラップ" },
   { value: "mixed", label: "混載" },
+  { value: "asbestos", label: "アスベスト" },
   { value: "other", label: "その他" },
 ] as const;
 
 const reportSchema = z
   .object({
     report_date: z.string().min(1, "作業日を入力してください"),
+    reporter_name: z.string().trim().min(1, "記入者名を入力してください").max(100, "100文字以内で入力してください"),
     site_id: z.string().min(1, "現場名を選択してください"),
     work_category_id: z.string().min(1, "工事分類を選択してください"),
-    worker_ids: z.array(z.string()).min(1, "作業員を1人以上選択してください"),
+    worker_ids: z.array(z.string()),
+    external_worker_entries: z.array(
+      z.object({
+        worker_label_id: z.string().min(1),
+        label_snapshot: z.string().trim().min(1),
+        count: z.coerce.number().min(0),
+      }),
+    ),
     work_shift: z.enum(["day", "night"]),
     contract_type: z.enum(["contract", "regular"]),
     miscellaneous_costs: z.string().max(3000, "3000文字以内で入力してください"),
@@ -59,7 +70,7 @@ const reportSchema = z
     disposal_entries: z.array(
       z.object({
         disposal_item_id: z.string().min(1),
-        waste_type: z.enum(["wood", "board", "rubble", "scrap", "mixed", "other"]),
+        waste_type: z.enum(["wood", "board", "rubble", "scrap", "mixed", "asbestos", "other"]),
         other_label: z.string().trim().max(100, "100文字以内で入力してください"),
         ton_count: z.coerce.number().min(0),
         truck_count: z.coerce.number().min(0),
@@ -77,11 +88,21 @@ const reportSchema = z
         count: z.coerce.number().min(0),
       }),
     ),
+    work_description: z.string().max(2000, "2000文字以内で入力してください"),
     other_workers_note: z.string().max(1000, "1000文字以内で入力してください"),
     remarks: z.string().max(2000, "2000文字以内で入力してください"),
     progress_status: z.enum(["continuing", "completed"]),
   })
   .superRefine((values, ctx) => {
+    const totalWorkerCount = values.worker_ids.length + values.external_worker_entries.reduce((sum, entry) => sum + entry.count, 0);
+    if (totalWorkerCount <= 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["worker_ids"],
+        message: "作業員を1人以上選択してください",
+      });
+    }
+
     values.lease_entries.forEach((entry, index) => {
       if (!entry.label.trim()) {
         ctx.addIssue({
@@ -275,14 +296,47 @@ function WorkerGroup({
   title,
   items,
   values,
+  externalCount,
   onToggle,
+  onChangeCount,
 }: {
   title: string;
   items: MasterItem[];
   values: string[];
+  externalCount?: number;
   onToggle: (itemId: string, checked: boolean) => void;
+  onChangeCount?: (count: number) => void;
 }) {
   if (items.length === 0) return null;
+
+  const isDaigoGroup = title.includes("大吾興業");
+
+  if (!isDaigoGroup && onChangeCount) {
+    const selectedCount = externalCount ?? 0;
+
+    return (
+      <div className="grid grid-cols-[minmax(0,1.5fr)_auto] items-center gap-3 rounded-xl border bg-background px-3 py-3">
+        <p className="min-w-0 text-sm font-semibold">{title}</p>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <select
+              className="flex h-11 w-[84px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:w-[96px] md:text-sm"
+              value={String(selectedCount)}
+              onChange={(event) => onChangeCount(Number(event.target.value))}
+            >
+              {subcontractorCountOptions.map((option) => (
+                <option key={option} value={String(option)}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+          </div>
+          <span className="text-sm">人</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -360,6 +414,25 @@ function buildWorkerCostSummaryRows(workers: ReportWorker[], workerIds: string[]
     unitPrice: value.unitPrice,
     subtotal: value.count * value.unitPrice,
   }));
+}
+
+function mergeWorkerCostRows(
+  rows: Array<{ label: string; count: number; unitPrice: number; subtotal: number }>,
+  externalEntries: ReportExternalWorkerEntry[],
+) {
+  const grouped = new Map(rows.map((row) => [row.label, { ...row }]));
+
+  externalEntries.forEach((entry) => {
+    const label = entry.label_snapshot.trim() || entry.item?.name?.trim() || "未分類";
+    const unitPrice = entry.unit_price_snapshot ?? entry.item?.unit_price ?? 0;
+    const current = grouped.get(label) ?? { label, count: 0, unitPrice, subtotal: 0 };
+    current.count += entry.count;
+    current.unitPrice = unitPrice;
+    current.subtotal += entry.count * unitPrice;
+    grouped.set(label, current);
+  });
+
+  return Array.from(grouped.values());
 }
 
 function QuantitySelect({
@@ -626,6 +699,7 @@ export function ReportForm({
   disposalItems,
   transportItems,
   reporterName,
+  isSubcontractor = false,
   initialReport,
   submitting,
   onSubmit,
@@ -639,6 +713,7 @@ export function ReportForm({
   disposalItems: MasterItem[];
   transportItems: MasterItem[];
   reporterName?: string | null;
+  isSubcontractor?: boolean;
   initialReport?: DailyReportDetail;
   submitting: boolean;
   onSubmit: (values: ReportFormValues, files: File[]) => Promise<void>;
@@ -646,13 +721,23 @@ export function ReportForm({
 }) {
   const { isMaster } = useAuth();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const form = useForm<ReportSchemaValues>({
-    resolver: zodResolver(reportSchema),
-    defaultValues: {
+  const draftKey = initialReport ? `report-form-draft:${initialReport.id}` : "report-form-draft:new";
+  const scrollKey = `${draftKey}:scroll`;
+  const restoredDraftKeyRef = useRef<string | null>(null);
+  const canPersistDraftRef = useRef(false);
+  const defaultValues = useMemo<ReportSchemaValues>(
+    () => ({
       report_date: initialReport?.report_date ?? toDateInputValue(),
+      reporter_name: initialReport?.reporter_name ?? reporterName ?? "",
       site_id: initialReport?.site_id ?? "",
       work_category_id: initialReport?.work_category_id ?? "",
       worker_ids: initialReport?.workers.map((item) => item.id) ?? [],
+      external_worker_entries:
+        initialReport?.external_worker_entries.map((entry) => ({
+          worker_label_id: entry.worker_label_id,
+          label_snapshot: entry.label_snapshot,
+          count: entry.count,
+        })) ?? [],
       work_shift: initialReport?.work_shift ?? "day",
       contract_type: initialReport?.contract_type ?? "contract",
       miscellaneous_costs: initialReport?.miscellaneous_costs ?? "",
@@ -676,18 +761,138 @@ export function ReportForm({
           count: entry.count,
         })) ?? [],
       other_vehicle_entries: initialReport?.other_vehicle_entries ?? [],
+      work_description: initialReport?.work_description ?? "",
       other_workers_note: initialReport?.other_workers_note ?? "",
       remarks: initialReport?.remarks ?? "",
       progress_status: initialReport?.progress_status ?? "continuing",
-    },
+    }),
+    [initialReport, reporterName],
+  );
+  const form = useForm<ReportSchemaValues>({
+    resolver: zodResolver(reportSchema),
+    defaultValues,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || restoredDraftKeyRef.current === draftKey) {
+      return;
+    }
+
+    restoredDraftKeyRef.current = draftKey;
+    canPersistDraftRef.current = false;
+
+    const rawDraft = window.sessionStorage.getItem(draftKey);
+    if (!rawDraft) {
+      form.reset(defaultValues);
+      canPersistDraftRef.current = true;
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(rawDraft) as Partial<ReportSchemaValues>;
+      form.reset({
+        ...defaultValues,
+        ...parsedDraft,
+        worker_ids: Array.isArray(parsedDraft.worker_ids) ? parsedDraft.worker_ids : defaultValues.worker_ids,
+        external_worker_entries: Array.isArray(parsedDraft.external_worker_entries)
+          ? parsedDraft.external_worker_entries
+          : defaultValues.external_worker_entries,
+        lease_entries: Array.isArray(parsedDraft.lease_entries) ? parsedDraft.lease_entries : defaultValues.lease_entries,
+        disposal_entries: Array.isArray(parsedDraft.disposal_entries) ? parsedDraft.disposal_entries : defaultValues.disposal_entries,
+        transport_entries: Array.isArray(parsedDraft.transport_entries) ? parsedDraft.transport_entries : defaultValues.transport_entries,
+        other_vehicle_entries: Array.isArray(parsedDraft.other_vehicle_entries)
+          ? parsedDraft.other_vehicle_entries
+          : defaultValues.other_vehicle_entries,
+      });
+    } catch {
+      window.sessionStorage.removeItem(draftKey);
+      form.reset(defaultValues);
+    } finally {
+      canPersistDraftRef.current = true;
+    }
+  }, [defaultValues, draftKey, form]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const restoreScroll = () => {
+      const rawScroll = window.sessionStorage.getItem(scrollKey);
+      if (!rawScroll) {
+        return;
+      }
+      const scrollY = Number(rawScroll);
+      if (!Number.isFinite(scrollY) || scrollY <= 0) {
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: scrollY, behavior: "auto" });
+        });
+      });
+    };
+
+    restoreScroll();
+  }, [scrollKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const subscription = form.watch((value) => {
+      if (!canPersistDraftRef.current) {
+        return;
+      }
+
+      window.sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          ...defaultValues,
+          ...value,
+          worker_ids: value.worker_ids ?? [],
+          external_worker_entries: value.external_worker_entries ?? [],
+          lease_entries: value.lease_entries ?? [],
+          disposal_entries: value.disposal_entries ?? [],
+          transport_entries: value.transport_entries ?? [],
+          other_vehicle_entries: value.other_vehicle_entries ?? [],
+        }),
+      );
+    });
+
+    return () => subscription.unsubscribe();
+  }, [defaultValues, draftKey, form]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const persistScroll = () => {
+      window.sessionStorage.setItem(scrollKey, String(window.scrollY));
+    };
+
+    persistScroll();
+    window.addEventListener("scroll", persistScroll, { passive: true });
+    window.addEventListener("pagehide", persistScroll);
+    document.addEventListener("visibilitychange", persistScroll);
+
+    return () => {
+      window.removeEventListener("scroll", persistScroll);
+      window.removeEventListener("pagehide", persistScroll);
+      document.removeEventListener("visibilitychange", persistScroll);
+    };
+  }, [scrollKey]);
 
   const leaseArray = useFieldArray({ control: form.control, name: "lease_entries" });
   const disposalArray = useFieldArray({ control: form.control, name: "disposal_entries" });
   const transportArray = useFieldArray({ control: form.control, name: "transport_entries" });
   const otherVehicleArray = useFieldArray({ control: form.control, name: "other_vehicle_entries" });
 
-  const selectedWorkerCount = form.watch("worker_ids").length;
+  const externalWorkerEntries = form.watch("external_worker_entries");
+  const selectedWorkerCount =
+    form.watch("worker_ids").length + externalWorkerEntries.reduce((sum, entry) => sum + entry.count, 0);
   const workerIds = form.watch("worker_ids");
   const leaseEntries = form.watch("lease_entries");
   const disposalEntries = form.watch("disposal_entries");
@@ -695,17 +900,28 @@ export function ReportForm({
   const otherVehicleEntries = form.watch("other_vehicle_entries");
 
   const workerGroups = useMemo(() => {
-    const groups = new Map<string, MasterItem[]>();
-    workers.forEach((worker) => {
-      const label = worker.group_label?.trim() || "ラベル未設定";
-      const list = groups.get(label) ?? [];
-      list.push(worker);
-      groups.set(label, list);
-    });
-    return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
-  }, [workers]);
+    return workerLabels
+      .map((label) => ({
+        label: label.name.trim().includes("大吾興業")
+          ? (label.name.trim().includes("従業員") ? label.name.trim() : `${label.name.trim()}従業員`)
+          : label.name.trim(),
+        labelId: label.id,
+        isDaigo: label.name.trim().includes("大吾興業"),
+        items: workers.filter((worker) => worker.group_label?.trim() === label.name.trim()),
+      }))
+      .filter((group) => group.label);
+  }, [workerLabels, workers]);
 
-  const workerCostSummary = useMemo(() => (isMaster ? buildWorkerCostSummaryRows(workers as ReportWorker[], workerIds, workerLabels) : []), [isMaster, workerIds, workerLabels, workers]);
+  const workerCostSummary = useMemo(
+    () =>
+      isMaster
+        ? mergeWorkerCostRows(
+            buildWorkerCostSummaryRows(workers as ReportWorker[], workerIds, workerLabels),
+            externalWorkerEntries as ReportExternalWorkerEntry[],
+          )
+        : [],
+    [externalWorkerEntries, isMaster, workerIds, workerLabels, workers],
+  );
 
   const previewPhotos = useMemo(
     () =>
@@ -726,6 +942,29 @@ export function ReportForm({
 
   const updateWorkerSelection = (itemId: string, checked: boolean) => {
     form.setValue("worker_ids", checked ? [...workerIds, itemId] : workerIds.filter((value) => value !== itemId), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const updateWorkerGroupCount = (groupItems: MasterItem[], count: number) => {
+    const groupIds = new Set(groupItems.map((item) => item.id));
+    const nextIds = workerIds.filter((value) => !groupIds.has(value));
+    const selectedIds = groupItems.slice(0, Math.min(count, groupItems.length)).map((item) => item.id);
+
+    form.setValue("worker_ids", [...nextIds, ...selectedIds], {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const updateExternalWorkerCount = (labelId: string, label: string, count: number) => {
+    const nextEntries = (externalWorkerEntries as ReportExternalWorkerEntry[]).filter((entry) => entry.worker_label_id !== labelId);
+    if (count > 0) {
+      nextEntries.push({ worker_label_id: labelId, label_snapshot: label, count });
+    }
+
+    form.setValue("external_worker_entries", nextEntries, {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -776,7 +1015,25 @@ export function ReportForm({
   const submit = form.handleSubmit(
     async (values) => {
       try {
-        await onSubmit({ ...values, worker_count: values.worker_ids.length }, pendingFiles);
+        const externalCount = values.external_worker_entries.reduce((sum, entry) => sum + entry.count, 0);
+        if (isSubcontractor && !values.reporter_name.trim()) {
+          form.setError("reporter_name", { type: "manual", message: "記入者名を入力してください" });
+          scrollToError("reporter_name");
+          toast.error("記入者名を入力してください");
+          return;
+        }
+        await onSubmit(
+          {
+            ...values,
+            reporter_name: isSubcontractor ? values.reporter_name.trim() : reporterName?.trim() ?? values.reporter_name.trim(),
+            worker_count: values.worker_ids.length + externalCount,
+          },
+          pendingFiles,
+        );
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(draftKey);
+          window.sessionStorage.removeItem(scrollKey);
+        }
         setPendingFiles([]);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "保存に失敗しました");
@@ -799,10 +1056,29 @@ export function ReportForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>記入者名</Label>
+            <Label>
+              記入者名<span className="ml-1 text-destructive">*</span>
+            </Label>
             <div className="rounded-xl border bg-background px-3 py-3">
-              <p className="text-sm font-semibold">{reporterName || "未設定"}</p>
-              {!reporterName ? <p className="mt-1 text-xs text-muted-foreground">名前が未設定です。設定画面の「表示名」から記入者名を登録してください。</p> : null}
+              {isSubcontractor ? (
+                <div className="space-y-2">
+                  <Input
+                    data-field-path="reporter_name"
+                    className="bg-white"
+                    value={form.watch("reporter_name")}
+                    onChange={(event) => form.setValue("reporter_name", event.target.value, { shouldDirty: true, shouldValidate: true })}
+                    placeholder="会社名 + 名前を入力"
+                  />
+                  <p className="text-xs text-muted-foreground">会社名+名前を日報で書くよう入力してください。</p>
+                  {form.formState.errors.reporter_name ? <p className="text-sm text-destructive">{form.formState.errors.reporter_name.message}</p> : null}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold">{reporterName || "未設定"}</p>
+                  {form.formState.errors.reporter_name ? <p className="mt-2 text-sm text-destructive">{form.formState.errors.reporter_name.message}</p> : null}
+                  {!reporterName ? <p className="mt-1 text-xs text-muted-foreground">名前が未設定です。設定画面の「表示名」から記入者名を登録してください。</p> : null}
+                </>
+              )}
             </div>
           </div>
 
@@ -956,13 +1232,30 @@ export function ReportForm({
             <div data-field-path="worker_ids" className="rounded-xl bg-secondary/60 px-3 py-2 text-sm font-medium">作業人数: {selectedWorkerCount}人</div>
             {form.formState.errors.worker_ids ? <p className="text-sm text-destructive">{form.formState.errors.worker_ids.message}</p> : null}
             {workerGroups.map((group) => (
-              <WorkerGroup key={group.label} title={group.label} items={group.items} values={workerIds} onToggle={updateWorkerSelection} />
+              <WorkerGroup
+                key={group.label}
+                title={group.label}
+                items={group.items}
+                values={workerIds}
+                externalCount={externalWorkerEntries.find((entry) => entry.worker_label_id === group.labelId)?.count ?? 0}
+                onToggle={updateWorkerSelection}
+                onChangeCount={(count) =>
+                  group.isDaigo
+                    ? updateWorkerGroupCount(group.items, count)
+                    : updateExternalWorkerCount(group.labelId, group.label, count)
+                }
+              />
             ))}
             {isMaster ? <WorkerCostSummary rows={workerCostSummary} /> : null}
             <div className="space-y-2">
               <Label htmlFor="other_workers_note">上記以外の従業員</Label>
               <Textarea id="other_workers_note" rows={4} placeholder="マスタに未登録の従業員がいれば入力" {...form.register("other_workers_note")} />
             </div>
+          </FieldBlock>
+
+          <FieldBlock title="作業内容">
+            <Textarea id="work_description" rows={5} placeholder="本日の作業内容を入力してください" {...form.register("work_description")} />
+            {form.formState.errors.work_description ? <p className="text-sm text-destructive">{form.formState.errors.work_description.message}</p> : null}
           </FieldBlock>
 
           <FieldBlock title="備考">

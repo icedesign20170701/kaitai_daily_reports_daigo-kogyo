@@ -60,8 +60,8 @@ const masterSchema = z.object({
 type MasterFormValues = z.infer<typeof masterSchema>;
 
 const pageLabels: Record<MasterItemType, { title: string; description: string }> = {
-  worker: { title: "作業員マスタ", description: "現場に入る作業員の一覧です。ラベルで会社や所属ごとに分けられます。" },
-  workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベルと1人あたり単価を管理します。" },
+  worker: { title: "作業員マスタ", description: "大吾興業の従業員一覧です。作業員ラベルに紐づけて管理します。" },
+  workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベル、単価、日報入力への表示有無を管理します。" },
   lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
   disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },
   transport: { title: "車両・運搬マスタ", description: "2TC や乗用車など、使用する車両の一覧です。" },
@@ -182,7 +182,12 @@ export function MastersPage() {
 
   const openEdit = (item: MasterItem) => {
     setEditingItem(item);
-    form.reset({ name: item.name, group_label: item.group_label ?? "", unit_price: item.unit_price ?? 0, is_active: item.is_active });
+    form.reset({
+      name: item.name,
+      group_label: item.group_label ?? "",
+      unit_price: item.unit_price ?? 0,
+      is_active: item.is_active,
+    });
     setDialogKey((current) => current + 1);
     setOpen(true);
   };
@@ -318,7 +323,7 @@ export function MastersPage() {
                   <GripVertical className="h-4 w-4" />
                 </button>
                   <p className="break-all text-base font-bold sm:text-lg">{item.name}</p>
-                  <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
+                  {masterType !== "workerLabel" ? <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge> : null}
                   {masterType === "worker" && item.group_label ? <Badge variant="outline">{item.group_label}</Badge> : null}
                   {masterType === "workerLabel" ? <Badge variant="outline">単価: {item.unit_price ?? 0}円</Badge> : null}
                 </div>
@@ -435,15 +440,19 @@ export function MastersPage() {
                   </div>
                 ) : null}
                 {masterType === "workerLabel" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="master-unit-price">単価</Label>
-                    <Input id="master-unit-price" type="number" min={0} step={1} {...form.register("unit_price", { valueAsNumber: true })} />
-                  </div>
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="master-unit-price">単価</Label>
+                      <Input id="master-unit-price" type="number" min={0} step={1} {...form.register("unit_price", { valueAsNumber: true })} />
+                    </div>
+                  </>
                 ) : null}
-                <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
-                  <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
-                  有効な項目として表示する
-                </label>
+                {masterType !== "workerLabel" ? (
+                  <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
+                    <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
+                    有効な項目として表示する
+                  </label>
+                ) : null}
                 <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-1 pt-4">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Button

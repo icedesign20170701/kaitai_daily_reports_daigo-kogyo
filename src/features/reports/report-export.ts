@@ -13,7 +13,7 @@ function vehicleSummary(report: Awaited<ReturnType<typeof getReportDetail>>) {
   ].join(" / ");
 }
 
-function disposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other") {
+function disposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed" | "asbestos" | "other") {
   switch (value) {
     case "wood":
       return "木類";
@@ -25,13 +25,18 @@ function disposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed
       return "スクラップ";
     case "mixed":
       return "混載";
+    case "asbestos":
+      return "アスベスト";
     case "other":
       return "その他";
   }
 }
 
 function workerSummary(report: Awaited<ReturnType<typeof getReportDetail>>) {
-  return report.workers.map((item) => `${item.label_snapshot || item.group_label || "未分類"}:${item.name}`).join(" / ");
+  return [
+    ...report.workers.map((item) => `${item.label_snapshot || item.group_label || "未分類"}:${item.name}`),
+    ...report.external_worker_entries.map((item) => `${item.label_snapshot || item.item?.name || "未分類"}:${item.count}人`),
+  ].join(" / ");
 }
 
 function workerCostSummary(report: Awaited<ReturnType<typeof getReportDetail>>) {
@@ -42,6 +47,14 @@ function workerCostSummary(report: Awaited<ReturnType<typeof getReportDetail>>) 
     const unitPrice = worker.unit_price_snapshot ?? 0;
     const current = grouped.get(label) ?? { count: 0, unitPrice };
     current.count += 1;
+    grouped.set(label, current);
+  });
+
+  report.external_worker_entries.forEach((entry) => {
+    const label = entry.label_snapshot || entry.item?.name || "未分類";
+    const unitPrice = entry.unit_price_snapshot ?? entry.item?.unit_price ?? 0;
+    const current = grouped.get(label) ?? { count: 0, unitPrice };
+    current.count += entry.count;
     grouped.set(label, current);
   });
 
@@ -91,6 +104,7 @@ export async function exportReportsCsv(
     "作業員",
     "作業人数",
     "上記以外の従業員",
+    "作業内容",
     "備考",
     "作業進行",
   ];
@@ -103,7 +117,7 @@ export async function exportReportsCsv(
     headers.join(","),
     ...details.map((report) => {
       const row = [
-        csvEscape(report.creator_display_name ?? "未設定"),
+        csvEscape(report.reporter_name ?? report.creator_display_name ?? "未設定"),
         formatDate(report.report_date),
         csvEscape(report.site?.name ?? ""),
         csvEscape(report.work_category?.name ?? ""),
@@ -126,6 +140,7 @@ export async function exportReportsCsv(
         csvEscape(workerSummary(report)),
         report.worker_count.toString(),
         csvEscape(report.other_workers_note ?? ""),
+        csvEscape(report.work_description ?? ""),
         csvEscape(report.remarks ?? ""),
         csvEscape(report.progress_status === "completed" ? "終了" : "継続"),
       ];

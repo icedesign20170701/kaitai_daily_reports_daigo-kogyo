@@ -4,12 +4,16 @@ create table if not exists public.app_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text,
   is_master boolean not null default false,
+  is_subcontractor boolean not null default false,
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 );
 
 alter table public.app_users
 add column if not exists sort_order integer not null default 0;
+
+alter table public.app_users
+add column if not exists is_subcontractor boolean not null default false;
 
 create table if not exists public.sites (
   id uuid primary key default gen_random_uuid(),
@@ -24,11 +28,13 @@ create table if not exists public.daily_reports (
   id uuid primary key default gen_random_uuid(),
   site_id uuid not null references public.sites(id),
   report_date date not null,
+  reporter_name text,
   worker_count integer not null check (worker_count > 0),
   work_shift text not null check (work_shift in ('day', 'night')),
   contract_type text not null check (contract_type in ('contract', 'regular')),
   miscellaneous_costs text,
   other_vehicle_entries jsonb not null default '[]'::jsonb,
+  work_description text,
   other_workers_note text,
   remarks text,
   progress_status text not null check (progress_status in ('continuing', 'completed')),
@@ -48,6 +54,12 @@ create table if not exists public.work_categories (
 
 alter table public.daily_reports
   add column if not exists work_category_id uuid references public.work_categories(id);
+
+alter table public.daily_reports
+  add column if not exists work_description text;
+
+alter table public.daily_reports
+  add column if not exists reporter_name text;
 
 create table if not exists public.workers (
   id uuid primary key default gen_random_uuid(),
@@ -104,6 +116,16 @@ create table if not exists public.daily_report_workers (
   unit_price_snapshot integer not null default 0,
   created_at timestamptz not null default now(),
   unique (report_id, worker_id)
+);
+
+create table if not exists public.daily_report_external_workers (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references public.daily_reports(id) on delete cascade,
+  worker_label_id uuid not null references public.worker_labels(id),
+  label_snapshot text not null,
+  count integer not null default 0 check (count >= 0),
+  unit_price_snapshot integer not null default 0,
+  created_at timestamptz not null default now()
 );
 
 alter table public.daily_report_workers
@@ -171,6 +193,7 @@ create index if not exists idx_daily_reports_site_id on public.daily_reports(sit
 create index if not exists idx_daily_reports_work_category_id on public.daily_reports(work_category_id);
 create index if not exists idx_daily_reports_report_date on public.daily_reports(report_date desc);
 create index if not exists idx_daily_report_workers_report_id on public.daily_report_workers(report_id);
+create index if not exists idx_daily_report_external_workers_report_id on public.daily_report_external_workers(report_id);
 create index if not exists idx_daily_report_lease_items_report_id on public.daily_report_lease_items(report_id);
 create index if not exists idx_daily_report_disposal_items_report_id on public.daily_report_disposal_items(report_id);
 create index if not exists idx_daily_report_transport_items_report_id on public.daily_report_transport_items(report_id);
@@ -222,15 +245,18 @@ create or replace function public.save_daily_report(
   p_site_id uuid,
   p_work_category_id uuid,
   p_report_date date,
+  p_reporter_name text,
   p_worker_count integer,
   p_work_shift text,
   p_contract_type text,
   p_miscellaneous_costs text,
   p_other_vehicle_entries jsonb,
+  p_work_description text,
   p_other_workers_note text,
   p_remarks text,
   p_progress_status text,
   p_worker_ids uuid[],
+  p_external_worker_entries jsonb,
   p_lease_entries jsonb,
   p_disposal_entries jsonb,
   p_transport_entries jsonb
@@ -252,11 +278,13 @@ begin
       site_id,
       work_category_id,
       report_date,
+      reporter_name,
       worker_count,
       work_shift,
       contract_type,
       miscellaneous_costs,
       other_vehicle_entries,
+      work_description,
       other_workers_note,
       remarks,
       progress_status,
@@ -266,11 +294,13 @@ begin
       p_site_id,
       p_work_category_id,
       p_report_date,
+      p_reporter_name,
       p_worker_count,
       p_work_shift,
       p_contract_type,
       p_miscellaneous_costs,
       coalesce(p_other_vehicle_entries, '[]'::jsonb),
+      p_work_description,
       p_other_workers_note,
       p_remarks,
       p_progress_status,
@@ -287,11 +317,13 @@ begin
       site_id = p_site_id,
       work_category_id = p_work_category_id,
       report_date = p_report_date,
+      reporter_name = p_reporter_name,
       worker_count = p_worker_count,
       work_shift = p_work_shift,
       contract_type = p_contract_type,
       miscellaneous_costs = p_miscellaneous_costs,
       other_vehicle_entries = coalesce(p_other_vehicle_entries, '[]'::jsonb),
+      work_description = p_work_description,
       other_workers_note = p_other_workers_note,
       remarks = p_remarks,
       progress_status = p_progress_status
@@ -327,6 +359,20 @@ begin
     join public.workers as worker on worker.id = input_worker.worker_id
     left join tmp_existing_worker_snapshots as existing on existing.worker_id = worker.id
     left join public.worker_labels as worker_label on worker_label.name = worker.group_label;
+  end if;
+
+  delete from public.daily_report_external_workers where report_id = v_report_id;
+  if coalesce(jsonb_array_length(coalesce(p_external_worker_entries, '[]'::jsonb)), 0) > 0 then
+    insert into public.daily_report_external_workers (report_id, worker_label_id, label_snapshot, count, unit_price_snapshot)
+    select
+      v_report_id,
+      (entry->>'worker_label_id')::uuid,
+      coalesce(nullif(trim(entry->>'label_snapshot'), ''), worker_label.name),
+      coalesce((entry->>'count')::integer, 0),
+      coalesce(worker_label.unit_price, 0)
+    from jsonb_array_elements(coalesce(p_external_worker_entries, '[]'::jsonb)) as entry
+    join public.worker_labels as worker_label on worker_label.id = (entry->>'worker_label_id')::uuid
+    where coalesce((entry->>'count')::integer, 0) > 0;
   end if;
 
   delete from public.daily_report_lease_items where report_id = v_report_id;
@@ -435,6 +481,7 @@ alter table public.lease_items enable row level security;
 alter table public.disposal_items enable row level security;
 alter table public.transport_items enable row level security;
 alter table public.daily_report_workers enable row level security;
+alter table public.daily_report_external_workers enable row level security;
 alter table public.daily_report_lease_items enable row level security;
 alter table public.daily_report_disposal_items enable row level security;
 alter table public.daily_report_transport_items enable row level security;
@@ -558,6 +605,21 @@ using (true);
 drop policy if exists "owners or masters can manage daily_report_workers" on public.daily_report_workers;
 create policy "owners or masters can manage daily_report_workers"
 on public.daily_report_workers
+for all
+to authenticated
+using (public.can_edit_report(report_id))
+with check (public.can_edit_report(report_id));
+
+drop policy if exists "authenticated users can read daily_report_external_workers" on public.daily_report_external_workers;
+create policy "authenticated users can read daily_report_external_workers"
+on public.daily_report_external_workers
+for select
+to authenticated
+using (true);
+
+drop policy if exists "owners or masters can manage daily_report_external_workers" on public.daily_report_external_workers;
+create policy "owners or masters can manage daily_report_external_workers"
+on public.daily_report_external_workers
 for all
 to authenticated
 using (public.can_edit_report(report_id))

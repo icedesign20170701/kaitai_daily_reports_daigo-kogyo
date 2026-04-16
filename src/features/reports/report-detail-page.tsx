@@ -16,7 +16,7 @@ import { listSites } from "@/features/sites/site-service";
 import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
-import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportPhoto, ReportWorker, Site } from "@/types/database";
+import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportExternalWorkerEntry, ReportPhoto, ReportWorker, Site } from "@/types/database";
 
 function DetailSection({ title, value, emptyLabel = "未入力" }: { title: string; value: string | null | undefined; emptyLabel?: string }) {
   return (
@@ -38,7 +38,7 @@ function ListSection({ title, rows }: { title: string; rows: string[] }) {
   );
 }
 
-function groupedWorkerRows(workers: ReportWorker[]) {
+function groupedWorkerRows(workers: ReportWorker[], externalEntries: ReportExternalWorkerEntry[]) {
   const map = new Map<string, string[]>();
   workers.forEach((worker) => {
     const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
@@ -46,10 +46,16 @@ function groupedWorkerRows(workers: ReportWorker[]) {
     list.push(worker.name);
     map.set(label, list);
   });
+  externalEntries.forEach((entry) => {
+    const label = entry.label_snapshot?.trim() || entry.item?.name?.trim() || "ラベル未設定";
+    const list = map.get(label) ?? [];
+    list.push(`${entry.count}人`);
+    map.set(label, list);
+  });
   return Array.from(map.entries()).map(([label, names]) => `${label}: ${names.join(" / ")}`);
 }
 
-function buildWorkerCostRows(workers: ReportWorker[], workerLabels: MasterItem[]) {
+function buildWorkerCostRows(workers: ReportWorker[], externalEntries: ReportExternalWorkerEntry[], workerLabels: MasterItem[]) {
   const labelPriceMap = new Map(workerLabels.map((item) => [item.name.trim(), item.unit_price ?? 0]));
   const grouped = new Map<string, { count: number; unitPrice: number }>();
 
@@ -57,6 +63,13 @@ function buildWorkerCostRows(workers: ReportWorker[], workerLabels: MasterItem[]
     const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
     const current = grouped.get(label) ?? { count: 0, unitPrice: worker.unit_price_snapshot ?? labelPriceMap.get(label) ?? 0 };
     current.count += 1;
+    grouped.set(label, current);
+  });
+
+  externalEntries.forEach((entry) => {
+    const label = entry.label_snapshot?.trim() || entry.item?.name?.trim() || "ラベル未設定";
+    const current = grouped.get(label) ?? { count: 0, unitPrice: entry.unit_price_snapshot ?? entry.item?.unit_price ?? labelPriceMap.get(label) ?? 0 };
+    current.count += entry.count;
     grouped.set(label, current);
   });
 
@@ -72,7 +85,7 @@ function otherVehicleRows(entries: OtherVehicleEntry[]) {
   return entries.filter((entry) => entry.label.trim()).map((entry) => `${entry.label}: ${entry.count}台`);
 }
 
-function getDisposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other") {
+function getDisposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mixed" | "asbestos" | "other") {
   switch (value) {
     case "wood":
       return "木類";
@@ -84,6 +97,8 @@ function getDisposalTypeLabel(value: "wood" | "board" | "rubble" | "scrap" | "mi
       return "スクラップ";
     case "mixed":
       return "混載";
+    case "asbestos":
+      return "アスベスト";
     case "other":
       return "その他";
   }
@@ -271,7 +286,10 @@ export function ReportDetailPage() {
     () => report?.transport_entries.filter((entry) => entry.count > 0).map((entry) => `${entry.item?.name ?? "未設定"}: ${entry.count}台`) ?? [],
     [report],
   );
-  const workerCostRows = useMemo(() => buildWorkerCostRows(report?.workers ?? [], workerLabels), [report?.workers, workerLabels]);
+  const workerCostRows = useMemo(
+    () => buildWorkerCostRows(report?.workers ?? [], report?.external_worker_entries ?? [], workerLabels),
+    [report?.external_worker_entries, report?.workers, workerLabels],
+  );
   const workerCostTotal = useMemo(() => workerCostRows.reduce((sum, row) => sum + row.subtotal, 0), [workerCostRows]);
 
   return (
@@ -312,7 +330,8 @@ export function ReportDetailPage() {
           leaseItems={leaseItems}
           disposalItems={disposalItems}
           transportItems={transportItems}
-          reporterName={appUser?.display_name ?? null}
+          reporterName={report.reporter_name ?? appUser?.display_name ?? null}
+          isSubcontractor={appUser?.is_subcontractor ?? false}
           initialReport={report}
           submitting={saving}
           onSubmit={handleSubmit}
@@ -353,9 +372,7 @@ export function ReportDetailPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">作成者</p>
                   <p className="mt-1 font-semibold">
-                    {report.created_by === user?.id
-                      ? appUser?.display_name || "未設定"
-                      : report.creator_display_name || report.created_by}
+                    {report.reporter_name ?? report.creator_display_name ?? report.created_by}
                   </p>
                 </div>
               </div>
@@ -365,7 +382,7 @@ export function ReportDetailPage() {
               <ListSection title="ゴミ処分" rows={disposalRows} />
               <ListSection title="車両・運搬" rows={transportRows} />
               <ListSection title="その他車両" rows={otherVehicleRows(report.other_vehicle_entries)} />
-              <ListSection title="作業員" rows={groupedWorkerRows(report.workers)} />
+              <ListSection title="作業員" rows={groupedWorkerRows(report.workers, report.external_worker_entries)} />
               {isMaster || masterOverride ? (
                 <ListSection
                   title="作業員単価集計"
@@ -375,6 +392,7 @@ export function ReportDetailPage() {
                   ]}
                 />
               ) : null}
+              <DetailSection title="作業内容" value={report.work_description} />
               <DetailSection title="上記以外の従業員" value={report.other_workers_note} />
               <DetailSection title="備考" value={report.remarks} />
             </CardContent>

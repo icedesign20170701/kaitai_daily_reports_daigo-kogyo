@@ -1,9 +1,11 @@
+import { useEffect, useMemo } from "react";
 import { ClipboardList, LogOut, MapPinned, Settings2, UserCircle2 } from "lucide-react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/features/auth/auth-service";
+import { useAuth } from "@/features/auth/auth-context";
 
 const navItems = [
   { to: "/reports", label: "日報", icon: ClipboardList },
@@ -14,7 +16,13 @@ const navItems = [
 
 export function AppLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isSubcontractor } = useAuth();
   const isReportEditingScreen = location.pathname.startsWith("/reports/new") || /^\/reports\/[^/]+$/.test(location.pathname);
+  const visibleNavItems = useMemo(
+    () => (isSubcontractor ? navItems.filter((item) => item.to === "/reports") : navItems),
+    [isSubcontractor],
+  );
   const heading = location.pathname.startsWith("/reports/new")
     ? "日報入力"
     : location.pathname.startsWith("/sites")
@@ -22,6 +30,16 @@ export function AppLayout() {
       : location.pathname.startsWith("/masters")
         ? "マスタ管理"
         : "日報管理";
+
+  useEffect(() => {
+    if (!isSubcontractor) {
+      return;
+    }
+
+    if (location.pathname.startsWith("/sites") || location.pathname.startsWith("/masters") || location.pathname.startsWith("/settings")) {
+      navigate("/reports", { replace: true });
+    }
+  }, [isSubcontractor, location.pathname, navigate]);
 
   const handleSignOut = async () => {
     try {
@@ -42,7 +60,7 @@ export function AppLayout() {
             <p className="mt-2 text-sm text-slate-300">スマホ入力を起点にした現場記録</p>
           </div>
           <nav className="space-y-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -88,7 +106,7 @@ export function AppLayout() {
         {!isReportEditingScreen ? (
           <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-white/50 bg-background/90 p-2 backdrop-blur-xl md:hidden">
             <div className="grid grid-cols-4 gap-2">
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

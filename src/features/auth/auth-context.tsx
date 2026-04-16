@@ -8,6 +8,7 @@ type AuthContextValue = {
   session: Session | null;
   appUser: AppUser | null;
   isMaster: boolean;
+  isSubcontractor: boolean;
   loading: boolean;
 };
 
@@ -48,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data, error } = await supabase
           .from("app_users")
-          .select("user_id, display_name, is_master, created_at")
+          .select("user_id, display_name, is_master, is_subcontractor, created_at")
           .eq("user_id", currentUser.id)
           .maybeSingle();
 
@@ -66,8 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               user_id: currentUser.id,
               display_name: null,
               is_master: false,
+              is_subcontractor: false,
             })
-            .select("user_id, display_name, is_master, created_at")
+            .select("user_id, display_name, is_master, is_subcontractor, created_at")
             .maybeSingle();
 
           if (!mounted || requestId !== appUserRequestId) {
@@ -117,7 +119,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, session, appUser, isMaster: appUser?.is_master ?? false, loading }),
+    () => ({
+      user,
+      session,
+      appUser,
+      isMaster: appUser?.is_master ?? false,
+      isSubcontractor: appUser?.is_subcontractor ?? false,
+      loading,
+    }),
     [user, session, appUser, loading],
   );
 

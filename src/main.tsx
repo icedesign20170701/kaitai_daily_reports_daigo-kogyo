@@ -7,10 +7,8 @@ import { AuthProvider } from "@/features/auth/auth-context";
 import "@/index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <AuthProvider>
-      <RouterProvider router={router} />
-      <Toaster richColors position="top-center" />
-    </AuthProvider>
-  </React.StrictMode>,
+  <AuthProvider>
+    <RouterProvider router={router} />
+    <Toaster richColors position="top-center" />
+  </AuthProvider>,
 );

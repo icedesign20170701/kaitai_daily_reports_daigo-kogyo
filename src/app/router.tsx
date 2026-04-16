@@ -1,18 +1,22 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/app/app-layout";
 import { ProtectedRoute } from "@/components/app/protected-route";
+import { RouteErrorPage } from "@/components/app/route-error-page";
 import { LoginPage } from "@/features/auth/login-page";
 
 export const router = createBrowserRouter([
   {
     path: "/login",
     element: <LoginPage />,
+    errorElement: <RouteErrorPage />,
   },
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteErrorPage />,
     children: [
       {
         element: <AppLayout />,
+        errorElement: <RouteErrorPage />,
         children: [
           { path: "/", element: <Navigate to="/reports" replace /> },
           {

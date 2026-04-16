@@ -3,6 +3,7 @@ import { useEffect } from "react";
 const AUTH_LOCK_RECOVERY_KEY = "kaitai-auth-lock-recovery-at";
 const AUTH_LOCK_RECOVERY_COOLDOWN_MS = 15000;
 const APP_RESUME_RECOVERY_KEY = "kaitai-app-resume-recovery-at";
+const APP_HIDDEN_AT_KEY = "kaitai-app-hidden-at";
 const APP_RESUME_RECOVERY_COOLDOWN_MS = 10000;
 const APP_RESUME_RELOAD_THRESHOLD_MS = 1000;
 
@@ -53,7 +54,6 @@ function triggerResumeReload() {
 
 export function RuntimeRecovery() {
   useEffect(() => {
-    let hiddenAt: number | null = null;
     let lastResumeHandledAt = 0;
 
     const handleErrorEvent = (event: ErrorEvent) => {
@@ -77,10 +77,11 @@ export function RuntimeRecovery() {
     };
 
     const markHidden = () => {
-      hiddenAt = Date.now();
+      sessionStorage.setItem(APP_HIDDEN_AT_KEY, String(Date.now()));
     };
 
     const handleResume = () => {
+      const hiddenAt = Number(sessionStorage.getItem(APP_HIDDEN_AT_KEY) ?? 0);
       if (!hiddenAt) {
         return;
       }
@@ -91,7 +92,7 @@ export function RuntimeRecovery() {
       }
 
       const hiddenDuration = now - hiddenAt;
-      hiddenAt = null;
+      sessionStorage.removeItem(APP_HIDDEN_AT_KEY);
       lastResumeHandledAt = now;
 
       if (hiddenDuration >= APP_RESUME_RELOAD_THRESHOLD_MS && window.location.pathname !== "/login") {
@@ -115,6 +116,7 @@ export function RuntimeRecovery() {
     window.addEventListener("focus", handleResume);
     window.addEventListener("pageshow", handleResume);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    handleResume();
 
     return () => {
       window.removeEventListener("error", handleErrorEvent);

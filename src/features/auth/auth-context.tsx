@@ -33,10 +33,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
       setLoading(false);
     }, 4000);
+    let appUserRequestId = 0;
 
     const loadAppUser = async (currentUser: User | null) => {
+      const requestId = ++appUserRequestId;
+
       if (!currentUser) {
-        setAppUser(null);
+        if (mounted) {
+          setAppUser(null);
+        }
         return;
       }
 
@@ -48,7 +53,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (error) {
-          setAppUser(null);
+          if (mounted && requestId === appUserRequestId) {
+            setAppUser(null);
+          }
           return;
         }
 
@@ -63,56 +70,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .select("user_id, display_name, is_master, created_at")
             .maybeSingle();
 
-          if (!mounted) {
+          if (!mounted || requestId !== appUserRequestId) {
             return;
           }
           setAppUser((inserted ?? null) as AppUser | null);
           return;
         }
 
-        if (!mounted) {
+        if (!mounted || requestId !== appUserRequestId) {
           return;
         }
         setAppUser((data ?? null) as AppUser | null);
       } catch {
-        setAppUser(null);
-      }
-    };
-
-    const bootstrap = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) {
-          return;
-        }
-        setSession(data.session);
-        setUser(data.session?.user ?? null);
-        await loadAppUser(data.session?.user ?? null);
-      } catch {
-        if (!mounted) {
-          return;
-        }
-        setSession(null);
-        setUser(null);
-        setAppUser(null);
-      } finally {
-        if (mounted) {
-          setLoading(false);
+        if (mounted && requestId === appUserRequestId) {
+          setAppUser(null);
         }
       }
     };
-
-    void bootstrap();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       try {
+        if (!mounted) {
+          return;
+        }
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
         await loadAppUser(nextSession?.user ?? null);
       } catch {
-        setAppUser(null);
+        if (mounted) {
+          setAppUser(null);
+        }
       } finally {
         if (mounted) {
           setLoading(false);

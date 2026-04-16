@@ -151,7 +151,7 @@ export function ReportsPage() {
           siteId: filters.siteId === "all" ? undefined : filters.siteId,
           createdBy: filters.createdBy === "all" ? undefined : filters.createdBy,
         }),
-        5000,
+        8000,
         "日報一覧の読み込みがタイムアウトしました。再度お試しください。",
       );
       setReports(data);
@@ -163,8 +163,8 @@ export function ReportsPage() {
   }, [filters]);
 
   useEffect(() => {
-    void withSupabaseRecovery(() => listSites(true), 4000).then(setSites).catch(() => undefined);
-    void withSupabaseRecovery(() => listAppUsers(), 4000).then(setAppUsers).catch(() => undefined);
+    void withSupabaseRecovery(() => listSites(true), 6000).then(setSites).catch(() => undefined);
+    void withSupabaseRecovery(() => listAppUsers(), 6000).then(setAppUsers).catch(() => undefined);
   }, []);
 
   useEffect(() => {

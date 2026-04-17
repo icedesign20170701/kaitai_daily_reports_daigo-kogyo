@@ -1069,7 +1069,7 @@ export function ReportForm({
                     onChange={(event) => form.setValue("reporter_name", event.target.value, { shouldDirty: true, shouldValidate: true })}
                     placeholder="会社名 + 名前を入力"
                   />
-                  <p className="text-xs text-muted-foreground">会社名+名前を日報で書くよう入力してください。</p>
+                  <p className="text-xs text-muted-foreground">会社名+名前を入力してください。</p>
                   {form.formState.errors.reporter_name ? <p className="text-sm text-destructive">{form.formState.errors.reporter_name.message}</p> : null}
                 </div>
               ) : (

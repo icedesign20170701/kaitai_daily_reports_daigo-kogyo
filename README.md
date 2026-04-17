@@ -1,37 +1,172 @@
-# 解体業向け日報 Web アプリ MVP
+# 解体業向け日報 Web アプリ
 
-React + Vite + TypeScript + Supabase + Tailwind CSS + shadcn/ui 風コンポーネントで構成した、単一会社向けの解体日報アプリです。スマホでの日報入力を優先しつつ、PC では日報一覧やマスタ管理をしやすい画面にしています。
+React + Vite + TypeScript + Supabase で構成した、単一会社向けの日報アプリです。  
+スマホでの日報入力を優先しつつ、PC では一覧確認、CSV 出力、マスタ管理をしやすい構成にしています。
+
+## できること
+
+- メールアドレス + パスワードでログイン
+- 現場管理
+- 日報の新規作成、編集、削除、詳細確認
+- 日報一覧の月送り、期間絞り込み、現場絞り込み、記入者絞り込み
+- CSV 出力
+- 工事分類、作業員ラベル、作業員、リース関係、ゴミ処分、車両・運搬のマスタ管理
+- マスターアカウントによるアカウント管理
+
+## 権限
+
+### 一般アカウント
+
+- 日報を作成できます
+- 自分が作成した日報だけ編集・削除できます
+- 一覧確認、絞り込み、CSV 出力ができます
+- 現場管理、マスタ管理ができます
+- 作業員単価や原価集計は表示されません
+
+### マスターアカウント
+
+- 一般アカウントの機能をすべて使えます
+- 全ユーザーの日報を編集・削除できます
+- 作業員単価、小計、合計原価を確認できます
+- アカウント管理画面を使えます
+- 表示名、マスター権限、外注業社権限、表示順を編集できます
+
+### 外注業社アカウント
+
+- 日報入力時に記入者名を自由入力できます
+- 記入者名は `会社名 + 名前` で入力する想定です
+- ナビゲーションでは `日報` だけ表示します
+- `現場` `マスタ` `設定` は表示しません
+
+## 日報入力仕様
+
+日報入力の主な項目は以下です。
+
+- 記入者名
+- 作業日
+- 現場名
+- 工事分類
+- 勤務区分
+- 契約区分
+- 諸経費
+- リース関係
+- ゴミ処分
+- 車両・運搬
+- 作業員
+- 上記以外の従業員
+- 作業内容
+- 備考
+- 作業進行
+- 写真
+
+### 作業員入力のルール
+
+- `大吾興業` を含む作業員ラベル
+  - 個人チェックリストで入力
+- `大吾興業` 以外の作業員ラベル
+  - ラベルごとの人数プルダウンで入力
+  - 最大 20 人
+
+作業員は、作業員マスタに登録されていて、かつ作業員ラベルが付いているものだけ日報入力に反映されます。
+
+### 単価の扱い
+
+- 単価は作業員ラベルマスタで管理します
+- 日報保存時に `daily_report_workers` / `daily_report_external_workers` へ単価スナップショットを保存します
+- 単価改定後も、過去の日報は保存当時の単価で表示・CSV 出力されます
+
+### 写真
+
+- 写真本体は外部ストレージへ保存します
+- Supabase には画像 URL のみ保存します
+- ブラウザ仕様上、未アップロードのファイル選択状態は自動リロード後に復元できません
+
+### 自動リロード時の復元
+
+- 日報入力中のフォーム値は `sessionStorage` に下書き保存します
+- 自動リロード後は内容とスクロール位置を復元します
+- 保存成功時は下書きを削除します
+
+## マスタ管理
+
+現在のマスタは以下です。
+
+- 工事分類
+- リース関係
+- ゴミ処分
+- 車両・運搬
+- 作業員ラベル
+- 作業員
+
+各マスタは並び替えに対応しています。
+
+- PC: ドラッグ
+- スマホ: 上下ボタン
+
+削除は論理削除です。
+
+- 今後の日報入力では選べなくなります
+- 過去の日報データには残ります
 
 ## セットアップ
 
-1. 依存関係をインストールします。
+1. 依存関係をインストール
 
 ```bash
 npm install
 ```
 
-2. 環境変数を設定します。
+2. 環境変数を作成
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` に Supabase の URL と anon key、および画像アップロード API の URL を設定してください。
+3. `.env` に値を設定
 
-3. Supabase の SQL エディタで [`src/supabase.sql`](/Users/yuma/Documents/develop/kaitai_daily_reports/src/supabase.sql) を実行します。
-   既に運用中の環境へ機能追加を反映する場合も、最新 SQL の再実行が必要です。最近の変更では `app_users.sort_order`、`worker_labels` テーブルが追加されています。
+最低限必要です。
 
-4. 自社サーバー側に画像アップロードAPIを用意します。
+```env
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_FILE_UPLOAD_URL=https://your-upload-server.example.com/api/uploads/report-photos
+```
 
-5. Supabase Auth で Email/Password を有効化し、利用ユーザーを作成します。
+必要に応じて以下も設定します。
 
-6. 開発サーバーを起動します。
+```env
+VITE_FILE_DELETE_URL=https://your-upload-server.example.com/api/uploads/report-photos/delete
+VITE_FILE_API_TOKEN=your-api-token
+```
+
+4. Supabase SQL を実行
+
+Supabase の SQL Editor で最新の [src/supabase.sql](/Users/yuma/Documents/develop/kaitai_daily_reports/src/supabase.sql) を実行してください。  
+既存環境に追加機能を反映する場合も、最新 SQL の再実行が必要です。
+
+最近の重要な変更:
+
+- `app_users.sort_order`
+- `app_users.is_subcontractor`
+- `daily_reports.reporter_name`
+- `daily_report_external_workers`
+- `daily_report_workers.label_snapshot`
+- `daily_report_workers.unit_price_snapshot`
+
+5. Supabase Auth を設定
+
+- Email / Password を有効化
+- 利用ユーザーを作成
+
+6. 開発サーバー起動
 
 ```bash
 npm run dev
 ```
 
-## Vercel デプロイ時の注意
+## Vercel デプロイ時の設定
+
+Vercel の Environment Variables に以下を設定してください。
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
@@ -39,80 +174,93 @@ npm run dev
 - `VITE_FILE_DELETE_URL` 任意
 - `VITE_FILE_API_TOKEN` 任意
 
-を Vercel の Environment Variables に設定してください。
+`vercel.json` は SPA rewrite 用です。  
+`/login` や `/reports/...` へ直接アクセスしても `index.html` に返す前提です。
 
-このリポジトリには [vercel.json](/Users/yuma/Documents/develop/kaitai_daily_reports/vercel.json) を入れてあり、SPA の `/login` や `/reports/...` へ直接アクセスしても `index.html` に rewrite される前提です。
-
-## 画面構成
+## 画面一覧
 
 - `/login`
 - `/reports`
 - `/reports/new`
 - `/reports/:id`
 - `/sites`
-- `/masters/workers`
-- `/masters/worker-labels`
+- `/masters/work-categories`
 - `/masters/lease-items`
 - `/masters/disposal-items`
 - `/masters/transport-items`
+- `/masters/worker-labels`
+- `/masters/workers`
 - `/settings/profile`
-- `/settings/users` マスターのみ
+- `/settings/users`
 
-## 実装内容
+## アカウント運用
 
-- Supabase Auth によるメールアドレス + パスワード認証
-- 現場 CRUD
-- 日報の登録、詳細表示、編集
-- 日報への作業員、リース関係、ゴミ処分、車両・運搬の紐付け
-- 写真の複数アップロードと一覧表示
-- 日報一覧の期間、現場、記入者フィルタと CSV 出力
-- 作業員ラベル、作業員、リース関係、ゴミ処分、車両・運搬のマスタ管理
-- マスターアカウント専用のアカウント管理
-- アカウント管理での表示順並び替え
-- 認証済みユーザーのみ CRUD を許可する簡易 RLS
-
-## Supabase 側の補足
-
-- 画像ファイル本体は自社サーバーなど外部ストレージへ保存し、Supabase の `report_photos.image_path` には画像URLだけを保存します。
-- `app_users.is_master = true` のユーザーは、他ユーザーが作成した日報も編集できます。
-- `app_users.sort_order` でアカウント管理画面の表示順を管理します。
-- 将来マルチテナント化する際は、各テーブルに `company_id` を追加し、RLS を `auth.uid()` と `company_id` で絞り込んでください。
-
-### マスターアカウント設定例
+### マスターアカウント付与例
 
 ```sql
 insert into public.app_users (user_id, is_master)
-values ('AUTH_USERSのUUIDをここに入れる', true)
+values ('AUTH_USERSのUUID', true)
 on conflict (user_id)
 do update set is_master = excluded.is_master;
 ```
 
-## 画像アップロードAPI仕様
+### 外注業社アカウント付与例
 
-フロントは以下の API を呼びます。
+```sql
+insert into public.app_users (user_id, is_subcontractor)
+values ('AUTH_USERSのUUID', true)
+on conflict (user_id)
+do update set is_subcontractor = excluded.is_subcontractor;
+```
+
+## 画像アップロード API 仕様
+
+### アップロード
 
 - `POST VITE_FILE_UPLOAD_URL`
-  - `multipart/form-data`
-  - fields:
-    - `file`: 画像ファイル
-    - `reportId`: 日報ID
-  - response:
+- `multipart/form-data`
+- fields
+  - `file`
+  - `reportId`
+
+レスポンス例:
+
 ```json
 { "url": "https://files.example.com/reports/abc/photo-1.jpg" }
 ```
 
-- `POST VITE_FILE_DELETE_URL` 任意
-  - `application/json`
-  - body:
+### 削除
+
+- `POST VITE_FILE_DELETE_URL`
+- `application/json`
+
+リクエスト例:
+
 ```json
 { "url": "https://files.example.com/reports/abc/photo-1.jpg" }
 ```
 
-`VITE_FILE_API_TOKEN` を入れると `Authorization: Bearer ...` を付けます。
+`VITE_FILE_API_TOKEN` を設定すると `Authorization: Bearer ...` を付けます。
 
-## 今後の拡張
+## 補足
+
+- 画像 URL は `report_photos.image_path` に保存しています
+- RLS は MVP として「ログイン済みユーザーのみ CRUD 可」を基本にしています
+- 将来マルチテナント化する場合は、各テーブルに `company_id` を追加して RLS を組み直す前提です
+- スマホ復帰時の安定性を優先して route lazy loading は使っていません
+
+## 動作確認
+
+主要確認コマンド:
+
+```bash
+npm run lint
+npm run build
+```
+
+## 今後の拡張候補
 
 - `company_id` 追加によるマルチテナント化
 - LINE 通知
 - PWA 化
-- 画像アップロード前の圧縮
+- 画像圧縮

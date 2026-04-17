@@ -728,7 +728,7 @@ export function ReportForm({
   const defaultValues = useMemo<ReportSchemaValues>(
     () => ({
       report_date: initialReport?.report_date ?? toDateInputValue(),
-      reporter_name: initialReport?.reporter_name ?? reporterName ?? "",
+      reporter_name: initialReport?.reporter_name ?? (isSubcontractor ? "" : reporterName ?? ""),
       site_id: initialReport?.site_id ?? "",
       work_category_id: initialReport?.work_category_id ?? "",
       worker_ids: initialReport?.workers.map((item) => item.id) ?? [],
@@ -766,7 +766,7 @@ export function ReportForm({
       remarks: initialReport?.remarks ?? "",
       progress_status: initialReport?.progress_status ?? "continuing",
     }),
-    [initialReport, reporterName],
+    [initialReport, isSubcontractor, reporterName],
   );
   const form = useForm<ReportSchemaValues>({
     resolver: zodResolver(reportSchema),

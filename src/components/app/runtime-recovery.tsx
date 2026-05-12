@@ -2,9 +2,6 @@ import { useEffect } from "react";
 
 const AUTH_LOCK_RECOVERY_KEY = "kaitai-auth-lock-recovery-at";
 const AUTH_LOCK_RECOVERY_COOLDOWN_MS = 15000;
-const APP_RESUME_RECOVERY_KEY = "kaitai-app-resume-recovery-at";
-const APP_WAS_HIDDEN_KEY = "kaitai-app-was-hidden";
-const APP_RESUME_RECOVERY_COOLDOWN_MS = 10000;
 
 type RecoveryWindow = Window & {
   __kaitaiSupabaseClient?: unknown;
@@ -39,22 +36,8 @@ function triggerRecovery() {
   }, 50);
 }
 
-function triggerResumeReload() {
-  const lastTriggeredAt = Number(sessionStorage.getItem(APP_RESUME_RECOVERY_KEY) ?? 0);
-  if (lastTriggeredAt && Date.now() - lastTriggeredAt <= APP_RESUME_RECOVERY_COOLDOWN_MS) {
-    return;
-  }
-
-  sessionStorage.setItem(APP_RESUME_RECOVERY_KEY, String(Date.now()));
-  window.setTimeout(() => {
-    window.location.reload();
-  }, 50);
-}
-
 export function RuntimeRecovery() {
   useEffect(() => {
-    let lastResumeHandledAt = 0;
-
     const handleErrorEvent = (event: ErrorEvent) => {
       const message = event.error instanceof Error ? event.error.message : event.message ?? "";
       if (shouldRecoverFromError(message)) {
@@ -75,55 +58,12 @@ export function RuntimeRecovery() {
       }
     };
 
-    const markHidden = () => {
-      sessionStorage.setItem(APP_WAS_HIDDEN_KEY, "1");
-    };
-
-    const handleResume = () => {
-      const wasHidden = sessionStorage.getItem(APP_WAS_HIDDEN_KEY) === "1";
-      if (!wasHidden) {
-        return;
-      }
-
-      const now = Date.now();
-      if (now - lastResumeHandledAt < 500) {
-        return;
-      }
-
-      sessionStorage.removeItem(APP_WAS_HIDDEN_KEY);
-      lastResumeHandledAt = now;
-
-      if (window.location.pathname !== "/login") {
-        triggerResumeReload();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        markHidden();
-        return;
-      }
-
-      handleResume();
-    };
-
     window.addEventListener("error", handleErrorEvent);
     window.addEventListener("unhandledrejection", handleRejection);
-    window.addEventListener("pagehide", markHidden);
-    window.addEventListener("blur", markHidden);
-    window.addEventListener("focus", handleResume);
-    window.addEventListener("pageshow", handleResume);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    handleResume();
 
     return () => {
       window.removeEventListener("error", handleErrorEvent);
       window.removeEventListener("unhandledrejection", handleRejection);
-      window.removeEventListener("pagehide", markHidden);
-      window.removeEventListener("blur", markHidden);
-      window.removeEventListener("focus", handleResume);
-      window.removeEventListener("pageshow", handleResume);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 

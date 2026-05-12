@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, Inbox } from "lucide-react";
+import { AlertTriangle, Inbox, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export function EmptyState({ title, description }: { title: string; description: string }) {
@@ -16,39 +16,33 @@ export function EmptyState({ title, description }: { title: string; description:
   );
 }
 
-export function ErrorState({ message }: { message: string }) {
-  const isTimeoutError = message.includes("タイムアウト");
-  const [remainingSeconds, setRemainingSeconds] = useState(3);
-
-  useEffect(() => {
-    if (!isTimeoutError) {
-      return;
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const handleRetry = () => {
+    if (onRetry) {
+      onRetry();
+    } else {
+      window.location.reload();
     }
-
-    setRemainingSeconds(3);
-    const countdownInterval = window.setInterval(() => {
-      setRemainingSeconds((current) => {
-        if (current <= 1) {
-          window.clearInterval(countdownInterval);
-          window.location.reload();
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
-
-    return () => window.clearInterval(countdownInterval);
-  }, [isTimeoutError, message]);
+  };
 
   return (
     <Card className="border-destructive/30">
-      <CardContent className="flex items-center gap-3 py-5 text-destructive">
-        <AlertTriangle className="h-5 w-5" />
-        <div className="space-y-1">
-          <p className="text-sm font-medium">{message}</p>
-          {isTimeoutError ? (
-            <p className="text-xs font-medium text-destructive/80">{remainingSeconds}秒後に画面をリロードします。</p>
-          ) : null}
+      <CardContent className="py-5">
+        <div className="flex items-start gap-3 text-destructive">
+          <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="space-y-3">
+            <p className="text-sm font-medium">{message}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleRetry}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              再試行
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

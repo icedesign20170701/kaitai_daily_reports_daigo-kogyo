@@ -322,7 +322,7 @@ export function ReportDetailPage() {
       {loading ? (
         <LoadingState message="日報データを読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : !report ? (
         <EmptyState title="日報が見つかりません" description="一覧に戻って別の日報を選択してください。" />
       ) : editing && canEditReport ? (

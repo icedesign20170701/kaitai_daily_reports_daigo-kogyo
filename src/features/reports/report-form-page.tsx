@@ -110,7 +110,7 @@ export function ReportFormPage() {
       {loading ? (
         <LoadingState message="日報入力に必要なデータを読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : (
         <ReportForm
           sites={sites}

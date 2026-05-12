@@ -294,7 +294,7 @@ export function UserAdminPage() {
       {loading ? (
         <LoadingState message="アカウント一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : users.length === 0 ? (
         <EmptyState title="アカウント情報がありません" description="各ユーザーが一度ログインすると一覧へ表示されます。" />
       ) : open ? (

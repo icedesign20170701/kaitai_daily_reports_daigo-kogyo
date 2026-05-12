@@ -395,7 +395,7 @@ export function ReportsPage() {
       {loading ? (
         <LoadingState message="日報一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void loadReports()} />
       ) : reports.length === 0 ? (
         <EmptyState title="日報がありません" description="条件を変えるか、新しい日報を登録してください。" />
       ) : (

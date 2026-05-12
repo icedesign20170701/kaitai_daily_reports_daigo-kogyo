@@ -14,7 +14,6 @@ declare global {
 }
 
 // ─── Auth lock ───────────────────────────────────────────────────────────────
-// Shared across HMR reloads by persisting on window.
 const browserLocks: Record<string, Promise<void>> = window.__kaitaiSupabaseLocks ?? {};
 window.__kaitaiSupabaseLocks = browserLocks;
 
@@ -59,21 +58,23 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
   }
 }
 
-// ─── iOS resume handling ─────────────────────────────────────────────────────
-// iOS freezes all JS when a PWA goes to the background. When it resumes, the
-// Supabase client's internal state (timers, session, pending fetches) can be
-// in an inconsistent state. The only fully reliable recovery is a page reload.
+// ─── iOS resume: always reload when returning from background ─────────────────
+// iOS freezes all JS when a PWA is backgrounded. Supabase's internal state
+// (session, timers, pending fetches) becomes unreliable on resume regardless
+// of how long the app was hidden. The only fully reliable recovery is a clean
+// page reload. Form drafts and scroll positions are persisted in sessionStorage
+// and are automatically restored after the reload.
 //
-// Strategy:
-//   - Background ≥ RELOAD_THRESHOLD → force a clean page reload
-//   - Background < RELOAD_THRESHOLD → just clear stuck locks (serialAuthLock handles the rest)
-//
-// The reload cooldown prevents reload loops if the user repeatedly backgrounds
-// and foregrounds the app.
+// Loop prevention: after a reload the page needs a few seconds to boot. The
+// cooldown key in sessionStorage stops a second reload from firing during that
+// window. sessionStorage is cleared when the tab is closed, so the cooldown
+// never carries over to a fresh launch.
 
-const RELOAD_THRESHOLD_MS = 1_000;        // 1 s in background → reload
 const RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
-const RELOAD_COOLDOWN_MS = 60_000;        // at most one reload per minute
+const RELOAD_COOLDOWN_MS = 8_000; // comfortably longer than a typical reload
+
+// Set on module init so the very first pageshow never triggers a reload.
+sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
 
 let hiddenSince = 0;
 
@@ -82,23 +83,24 @@ function onAppHidden() {
 }
 
 function onAppVisible() {
-  const hiddenMs = hiddenSince > 0 ? Date.now() - hiddenSince : 0;
+  if (hiddenSince === 0) {
+    // Not returning from background (e.g. initial pageshow) — just clear locks.
+    clearLocks();
+    return;
+  }
   hiddenSince = 0;
 
-  if (hiddenMs >= RELOAD_THRESHOLD_MS) {
-    const lastAt = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) ?? 0);
-    if (Date.now() - lastAt > RELOAD_COOLDOWN_MS) {
-      sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
-      window.location.reload();
-      return;
-    }
+  const lastAt = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) ?? 0);
+  if (Date.now() - lastAt < RELOAD_COOLDOWN_MS) {
+    // Page was just reloaded — skip to avoid a reload loop.
+    clearLocks();
+    return;
   }
 
-  // Short background or already reloaded recently — clear stuck locks instead.
-  clearLocks();
+  sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
+  window.location.reload();
 }
 
-// visibilitychange covers most iOS PWA resume cases.
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     onAppHidden();
@@ -107,10 +109,8 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// pagehide fires before bfcache freezes the page (complements visibilitychange).
 window.addEventListener("pagehide", onAppHidden);
 
-// pageshow with persisted:true fires when iOS restores from bfcache.
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
     onAppVisible();

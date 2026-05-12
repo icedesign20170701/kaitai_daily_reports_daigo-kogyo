@@ -923,16 +923,21 @@ export function ReportForm({
     [externalWorkerEntries, isMaster, workerIds, workerLabels, workers],
   );
 
-  const previewPhotos = useMemo(
-    () =>
-      pendingFiles.map((file, index) => ({
-        id: `${file.name}-${index}`,
-        index,
-        name: file.name,
-        url: URL.createObjectURL(file),
-      })),
-    [pendingFiles],
-  );
+  const [previewPhotos, setPreviewPhotos] = useState<Array<{ id: string; index: number; name: string; url: string }>>([]);
+
+  useEffect(() => {
+    const photos = pendingFiles.map((file, index) => ({
+      id: `${file.name}-${index}`,
+      index,
+      name: file.name,
+      url: URL.createObjectURL(file),
+    }));
+    setPreviewPhotos(photos);
+
+    return () => {
+      photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    };
+  }, [pendingFiles]);
 
   const existingPhotos =
     initialReport?.photos.map((photo) => ({

@@ -13,33 +13,21 @@ declare global {
   }
 }
 
-// Shared lock state — persisted on window so HMR reloads don't lose it
+// ─── Auth lock ───────────────────────────────────────────────────────────────
+// Shared across HMR reloads by persisting on window.
 const browserLocks: Record<string, Promise<void>> = window.__kaitaiSupabaseLocks ?? {};
 window.__kaitaiSupabaseLocks = browserLocks;
 
-// Tracks the last time the app became visible after being backgrounded
 let lastResumedAt = 0;
 
-function handleAppResume() {
+function clearLocks() {
   lastResumedAt = Date.now();
-  // Drop all pending lock chains so the next acquisition starts fresh
   for (const key of Object.keys(browserLocks)) {
     delete browserLocks[key];
   }
 }
 
-// Module-level registration fires BEFORE any useEffect in page components,
-// so lastResumedAt is set before the page's data-fetch handlers run.
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    handleAppResume();
-  }
-});
-window.addEventListener("pageshow", handleAppResume);
-
-// How long after resume to treat any lock acquisition as "fresh" (bypass stuck lock)
 const RESUME_GRACE_MS = 3000;
-// Fallback timeout for a lock that gets stuck for reasons other than iOS freeze
 const LOCK_STUCK_TIMEOUT_MS = 5000;
 
 async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () => Promise<T>): Promise<T> {
@@ -49,16 +37,12 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
     release = resolve;
   });
 
-  // If the app just resumed, skip waiting for the previous lock — it may be
-  // frozen from before the app was backgrounded and will never release on its own.
   const resumedRecently = lastResumedAt > 0 && Date.now() - lastResumedAt < RESUME_GRACE_MS;
 
   const gate = resumedRecently
     ? Promise.resolve()
     : Promise.race([previous, new Promise<void>((resolve) => window.setTimeout(resolve, LOCK_STUCK_TIMEOUT_MS))]);
 
-  // queued settles only after gate settles AND release() is called,
-  // so the next lock acquisition waits for the current holder to finish.
   const queued = gate.finally(() => current);
   browserLocks[name] = queued;
 
@@ -75,6 +59,65 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
   }
 }
 
+// ─── iOS resume handling ─────────────────────────────────────────────────────
+// iOS freezes all JS when a PWA goes to the background. When it resumes, the
+// Supabase client's internal state (timers, session, pending fetches) can be
+// in an inconsistent state. The only fully reliable recovery is a page reload.
+//
+// Strategy:
+//   - Background ≥ RELOAD_THRESHOLD → force a clean page reload
+//   - Background < RELOAD_THRESHOLD → just clear stuck locks (serialAuthLock handles the rest)
+//
+// The reload cooldown prevents reload loops if the user repeatedly backgrounds
+// and foregrounds the app.
+
+const RELOAD_THRESHOLD_MS = 10_000;       // 10 s in background → reload
+const RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
+const RELOAD_COOLDOWN_MS = 60_000;        // at most one reload per minute
+
+let hiddenSince = 0;
+
+function onAppHidden() {
+  hiddenSince = Date.now();
+}
+
+function onAppVisible() {
+  const hiddenMs = hiddenSince > 0 ? Date.now() - hiddenSince : 0;
+  hiddenSince = 0;
+
+  if (hiddenMs >= RELOAD_THRESHOLD_MS) {
+    const lastAt = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) ?? 0);
+    if (Date.now() - lastAt > RELOAD_COOLDOWN_MS) {
+      sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
+      window.location.reload();
+      return;
+    }
+  }
+
+  // Short background or already reloaded recently — clear stuck locks instead.
+  clearLocks();
+}
+
+// visibilitychange covers most iOS PWA resume cases.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    onAppHidden();
+  } else {
+    onAppVisible();
+  }
+});
+
+// pagehide fires before bfcache freezes the page (complements visibilitychange).
+window.addEventListener("pagehide", onAppHidden);
+
+// pageshow with persisted:true fires when iOS restores from bfcache.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    onAppVisible();
+  }
+});
+
+// ─── Client ──────────────────────────────────────────────────────────────────
 function buildSupabaseClient() {
   return createClient(supabaseUrl ?? "https://placeholder.invalid", supabaseAnonKey ?? "placeholder-anon-key", {
     auth: {

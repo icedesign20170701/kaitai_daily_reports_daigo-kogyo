@@ -371,7 +371,7 @@ export function ReportDetailPage() {
               <ListSection title="車両・運搬" rows={transportRows} />
               <ListSection title="その他車両" rows={otherVehicleRows(report.other_vehicle_entries)} />
               <ListSection title="作業員" rows={groupedWorkerRows(report.workers, report.external_worker_entries)} />
-              {isMaster || masterOverride ? (
+              {isMaster ? (
                 <ListSection
                   title="作業員単価集計"
                   rows={[

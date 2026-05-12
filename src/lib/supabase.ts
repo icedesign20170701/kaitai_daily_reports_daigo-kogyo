@@ -71,7 +71,7 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
 // The reload cooldown prevents reload loops if the user repeatedly backgrounds
 // and foregrounds the app.
 
-const RELOAD_THRESHOLD_MS = 10_000;       // 10 s in background → reload
+const RELOAD_THRESHOLD_MS = 1_000;        // 1 s in background → reload
 const RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
 const RELOAD_COOLDOWN_MS = 60_000;        // at most one reload per minute
 

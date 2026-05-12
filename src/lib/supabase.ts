@@ -16,23 +16,52 @@ declare global {
 
 const browserLocks = window.__kaitaiSupabaseLocks ?? (window.__kaitaiSupabaseLocks = {});
 
+// iOS バックグラウンド復帰時、凍結された fetch で詰まったロック待ちを即時解放するためのシグナル。
+// visibilitychange → visible のタイミングで全リゾルバを呼び出す。
+const lockResumeResolvers = new Set<() => void>();
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    for (const resolve of lockResumeResolvers) {
+      resolve();
+    }
+    lockResumeResolvers.clear();
+  }
+});
+
 const serialAuthLock: LockFunc = async <R>(name: string, _acquireTimeout: number, fn: () => Promise<R>) => {
   const previous = browserLocks[name] ?? Promise.resolve();
   let release!: () => void;
+  let resumeResolver: (() => void) | undefined;
 
   const current = new Promise<void>((resolve) => {
     release = resolve;
   });
 
-  const queued = previous.finally(() => current);
+  const resumeGate = new Promise<void>((resolve) => {
+    resumeResolver = resolve;
+    lockResumeResolvers.add(resolve);
+  });
+
+  // 前のロック完了 / 復帰シグナル / 3秒タイムアウト のいずれか早い方で進む。
+  // iOS で凍結された fetch が永久に完了しない場合でも確実に詰まりを解消する。
+  const gate = Promise.race([
+    previous,
+    resumeGate,
+    new Promise<void>((resolve) => window.setTimeout(resolve, 3000)),
+  ]);
+
+  const queued = gate.finally(() => current);
   browserLocks[name] = queued;
 
   try {
-    await previous;
+    await gate;
     return await fn();
   } finally {
     release();
-
+    if (resumeResolver !== undefined) {
+      lockResumeResolvers.delete(resumeResolver);
+    }
     queued.finally(() => {
       if (browserLocks[name] === queued) {
         delete browserLocks[name];

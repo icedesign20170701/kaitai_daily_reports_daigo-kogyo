@@ -156,7 +156,7 @@ export function ReportDetailPage() {
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
         ]),
-        5000,
+        10000,
         "日報詳細の読み込みがタイムアウトしました。再度お試しください。",
       );
       setReport(detail);

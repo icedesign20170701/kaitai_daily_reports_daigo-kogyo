@@ -41,7 +41,7 @@ export function ReportFormPage() {
           listMasterItems("disposal", false),
           listMasterItems("transport", false),
         ]),
-        5000,
+        10000,
         "日報入力の初期データ読み込みがタイムアウトしました。再度お試しください。",
       );
       setSites(siteData);

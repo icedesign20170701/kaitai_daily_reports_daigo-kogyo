@@ -3,11 +3,6 @@ import { useEffect } from "react";
 const AUTH_LOCK_RECOVERY_KEY = "kaitai-auth-lock-recovery-at";
 const AUTH_LOCK_RECOVERY_COOLDOWN_MS = 15000;
 
-type RecoveryWindow = Window & {
-  __kaitaiSupabaseClient?: unknown;
-  __kaitaiSupabaseLocks?: Record<string, Promise<unknown>>;
-};
-
 function shouldRecoverFromError(message: string) {
   return (
     message.includes('Lock "lock:sb-') &&
@@ -26,10 +21,6 @@ function triggerRecovery() {
   }
 
   sessionStorage.setItem(AUTH_LOCK_RECOVERY_KEY, String(Date.now()));
-
-  const recoveryWindow = window as RecoveryWindow;
-  recoveryWindow.__kaitaiSupabaseClient = undefined;
-  recoveryWindow.__kaitaiSupabaseLocks = {};
 
   window.setTimeout(() => {
     window.location.reload();

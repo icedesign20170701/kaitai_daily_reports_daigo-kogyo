@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { AppUser } from "@/types/database";
@@ -10,6 +10,7 @@ type AuthContextValue = {
   isMaster: boolean;
   isSubcontractor: boolean;
   loading: boolean;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data, error } = await supabase
           .from("app_users")
-          .select("user_id, display_name, is_master, is_subcontractor, created_at")
+          .select("user_id, display_name, is_master, is_subcontractor, sort_order, created_at")
           .eq("user_id", currentUser.id)
           .maybeSingle();
 
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               is_master: false,
               is_subcontractor: false,
             })
-            .select("user_id, display_name, is_master, is_subcontractor, created_at")
+            .select("user_id, display_name, is_master, is_subcontractor, sort_order, created_at")
             .maybeSingle();
 
           if (!mounted || requestId !== appUserRequestId) {
@@ -118,6 +119,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("app_users")
+      .select("user_id, display_name, is_master, is_subcontractor, sort_order, created_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (data) {
+      setAppUser(data as AppUser);
+    }
+  }, [user]);
+
   const value = useMemo(
     () => ({
       user,
@@ -126,8 +139,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMaster: appUser?.is_master ?? false,
       isSubcontractor: appUser?.is_subcontractor ?? false,
       loading,
+      refreshProfile,
     }),
-    [user, session, appUser, loading],
+    [user, session, appUser, loading, refreshProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

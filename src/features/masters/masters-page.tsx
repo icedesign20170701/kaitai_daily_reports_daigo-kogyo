@@ -523,7 +523,7 @@ export function MastersPage() {
       {loading ? (
         <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : items.length === 0 ? (
         <EmptyState title="項目がありません" description="最初の項目を追加してください。" />
       ) : open ? (

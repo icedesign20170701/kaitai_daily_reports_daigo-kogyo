@@ -21,7 +21,7 @@ const profileSchema = z.object({
 type ProfileFormValues = z.infer<typeof profileSchema>;
 
 export function ProfilePage() {
-  const { user, appUser, isMaster } = useAuth();
+  const { user, appUser, isMaster, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
@@ -54,7 +54,8 @@ export function ProfilePage() {
         throw error;
       }
 
-      toast.success("表示名を更新しました。再読み込みすると反映されます。");
+      await refreshProfile();
+      toast.success("表示名を更新しました");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "表示名の更新に失敗しました");
     } finally {

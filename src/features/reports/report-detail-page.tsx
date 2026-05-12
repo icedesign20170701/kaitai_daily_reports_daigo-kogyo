@@ -13,7 +13,6 @@ import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
 import { deletePhoto, deleteReport, getReportDetail, saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
-import { supabase } from "@/lib/supabase";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
 import type { DailyReportDetail, MasterItem, OtherVehicleEntry, ReportExternalWorkerEntry, ReportPhoto, ReportWorker, Site } from "@/types/database";
@@ -127,7 +126,6 @@ export function ReportDetailPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [masterOverride, setMasterOverride] = useState(false);
   const [report, setReport] = useState<DailyReportDetail | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [workCategories, setWorkCategories] = useState<MasterItem[]>([]);
@@ -203,20 +201,6 @@ export function ReportDetailPage() {
     };
   }, [load, loading]);
 
-  useEffect(() => {
-    if (!user) {
-      setMasterOverride(false);
-      return;
-    }
-
-    const loadMasterFlag = async () => {
-      const { data } = await supabase.from("app_users").select("is_master").eq("user_id", user.id).maybeSingle();
-      setMasterOverride(data?.is_master ?? false);
-    };
-
-    void loadMasterFlag();
-  }, [user]);
-
   const reload = async () => {
     if (!id) return;
     try {
@@ -270,7 +254,7 @@ export function ReportDetailPage() {
     }
   };
 
-  const canEditReport = Boolean(user && report && (report.created_by === user.id || isMaster || masterOverride));
+  const canEditReport = Boolean(user && report && (report.created_by === user.id || isMaster));
 
   const leaseRows = useMemo(
     () =>

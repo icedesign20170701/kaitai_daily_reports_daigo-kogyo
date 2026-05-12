@@ -214,7 +214,7 @@ export function SitesPage() {
       {loading ? (
         <LoadingState message="現場一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={() => void load()} />
       ) : sites.length === 0 ? (
         <EmptyState title="現場がありません" description="最初の現場を追加してください。" />
       ) : (

@@ -245,8 +245,9 @@ export async function deletePhoto(photo: ReportPhoto) {
   const { error } = await supabase.from("report_photos").delete().eq("id", photo.id);
   if (error) throw error;
 
-  const removeResult = await Promise.allSettled([storageService.removePhoto(photo.image_path)]);
-  if (removeResult[0]?.status === "rejected") {
+  try {
+    await storageService.removePhoto(photo.image_path);
+  } catch {
     throw new Error("DBから写真を削除しましたが、外部ファイルの削除に失敗しました。");
   }
 }

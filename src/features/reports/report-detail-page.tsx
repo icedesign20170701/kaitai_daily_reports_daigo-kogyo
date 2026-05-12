@@ -219,12 +219,16 @@ export function ReportDetailPage() {
 
   const reload = async () => {
     if (!id) return;
-    const detail = await withSupabaseRecovery(
-      () => getReportDetail(id),
-      4000,
-      "最新の日報データ取得がタイムアウトしました。再度お試しください。",
-    );
-    setReport(detail);
+    try {
+      const detail = await withSupabaseRecovery(
+        () => getReportDetail(id),
+        4000,
+        "最新の日報データ取得がタイムアウトしました。再度お試しください。",
+      );
+      setReport(detail);
+    } catch (nextError) {
+      toast.error(nextError instanceof Error ? nextError.message : "日報の再取得に失敗しました");
+    }
   };
 
   const handleSubmit = async (values: Parameters<typeof saveReport>[0], files: File[]) => {

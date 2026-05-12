@@ -151,7 +151,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     disposal_entries: ((disposalResult.data ?? []) as Array<{
       id: string;
       disposal_item_id: string;
-      waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "other";
+      waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "asbestos" | "other";
       other_label: string | null;
       ton_count: number;
       truck_count: number;

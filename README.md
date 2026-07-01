@@ -219,6 +219,19 @@ do update set is_subcontractor = excluded.is_subcontractor;
 
 ## 画像アップロード API 仕様
 
+XSERVER などのPHPサーバーで使う場合は、以下をサーバーのドキュメントルートへ配置してください。
+
+```text
+server/xserver/api/uploads/report-photos/index.php
+  -> https://report.daigo-kogyo.com/api/uploads/report-photos
+
+server/xserver/api/uploads/report-photos/delete/index.php
+  -> https://report.daigo-kogyo.com/api/uploads/report-photos/delete
+```
+
+アップロードされた画像は、サーバー上の `/uploads/report-photos/{reportId}/` に保存されます。
+`uploads` ディレクトリはPHPから書き込み可能な権限にしてください。
+
 ### アップロード
 
 - `POST VITE_FILE_UPLOAD_URL`
@@ -230,7 +243,7 @@ do update set is_subcontractor = excluded.is_subcontractor;
 レスポンス例:
 
 ```json
-{ "url": "https://report.daigo-kogyo.com/reports/abc/photo-1.jpg" }
+{ "url": "https://report.daigo-kogyo.com/uploads/report-photos/00000000-0000-0000-0000-000000000000/photo.webp" }
 ```
 
 ### 削除

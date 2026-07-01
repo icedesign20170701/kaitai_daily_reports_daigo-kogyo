@@ -31,7 +31,8 @@ export const storageService = {
     });
 
     if (!response.ok) {
-      throw new Error("画像アップロードに失敗しました。");
+      const message = await response.text().catch(() => "");
+      throw new Error(`画像アップロードに失敗しました。${response.status}${message ? `: ${message}` : ""}`);
     }
 
     const data = (await response.json()) as UploadResponse;

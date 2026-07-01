@@ -263,7 +263,14 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
     }
 
     if (failedCount > 0) {
-      uploadErrors.push(`${failedCount}件の写真アップロードに失敗しました`);
+      const errorMessages = Array.from(
+        new Set(
+          uploadResults.flatMap((result) =>
+            result.status === "rejected" && result.reason instanceof Error ? [result.reason.message] : [],
+          ),
+        ),
+      );
+      uploadErrors.push(`${failedCount}件の写真アップロードに失敗しました${errorMessages.length > 0 ? `: ${errorMessages.join(" / ")}` : ""}`);
     }
   }
 

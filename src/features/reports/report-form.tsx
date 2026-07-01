@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/auth-context";
+import { compressImageFile } from "@/lib/image-compression";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, toDateInputValue } from "@/lib/utils";
 import type {
@@ -1002,11 +1003,22 @@ export function ReportForm({
     });
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
-    setPendingFiles((current) => [...current, ...files]);
     event.target.value = "";
+
+    const compressedFiles = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return await compressImageFile(file);
+        } catch {
+          toast.error(`${file.name} の画像変換に失敗しました。元ファイルで追加します。`);
+          return file;
+        }
+      }),
+    );
+    setPendingFiles((current) => [...current, ...compressedFiles]);
   };
 
   const leaseEntryErrors = (form.formState.errors.lease_entries ?? []) as Array<{ label?: { message?: string }; count?: { message?: string } } | undefined>;

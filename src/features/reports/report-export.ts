@@ -1,4 +1,4 @@
-import { getReportDetail } from "@/features/reports/report-service";
+import { displayReportSiteName, getReportDetail } from "@/features/reports/report-service";
 import { downloadTextFile, formatDate } from "@/lib/utils";
 import type { DailyReport, Site } from "@/types/database";
 
@@ -119,7 +119,7 @@ export async function exportReportsCsv(
       const row = [
         csvEscape(report.reporter_name ?? report.creator_display_name ?? "未設定"),
         formatDate(report.report_date),
-        csvEscape(report.site?.name ?? ""),
+        csvEscape(displayReportSiteName(report)),
         csvEscape(report.work_category?.name ?? ""),
         csvEscape(report.work_shift === "night" ? "夜勤" : "昼勤"),
         csvEscape(report.contract_type === "regular" ? "常用" : "請負"),

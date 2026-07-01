@@ -33,6 +33,7 @@ import type {
 
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
 const subcontractorCountOptions = Array.from({ length: 21 }, (_, index) => index);
+const MANUAL_SITE_OPTION = "__manual__";
 const disposalTypeOptions = [
   { value: "wood", label: "木類" },
   { value: "board", label: "ボード" },
@@ -48,6 +49,7 @@ const reportSchema = z
     report_date: z.string().min(1, "作業日を入力してください"),
     reporter_name: z.string().trim().min(1, "記入者名を入力してください").max(100, "100文字以内で入力してください"),
     site_id: z.string().min(1, "現場名を選択してください"),
+    site_name: z.string().trim().max(100, "100文字以内で入力してください"),
     work_category_id: z.string().min(1, "工事分類を選択してください"),
     worker_ids: z.array(z.string()),
     external_worker_entries: z.array(
@@ -94,6 +96,16 @@ const reportSchema = z
     progress_status: z.enum(["continuing", "completed"]),
   })
   .superRefine((values, ctx) => {
+    if (values.site_id === MANUAL_SITE_OPTION) {
+      if (!values.site_name.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["site_name"],
+          message: "現場名を入力してください",
+        });
+      }
+    }
+
     const totalWorkerCount = values.worker_ids.length + values.external_worker_entries.reduce((sum, entry) => sum + entry.count, 0);
     if (totalWorkerCount <= 0) {
       ctx.addIssue({
@@ -729,7 +741,8 @@ export function ReportForm({
     () => ({
       report_date: initialReport?.report_date ?? toDateInputValue(),
       reporter_name: initialReport?.reporter_name ?? (isSubcontractor ? "" : reporterName ?? ""),
-      site_id: initialReport?.site_id ?? "",
+      site_id: initialReport?.site_id ?? (initialReport?.site_name ? MANUAL_SITE_OPTION : ""),
+      site_name: initialReport?.site_name ?? "",
       work_category_id: initialReport?.work_category_id ?? "",
       worker_ids: initialReport?.workers.map((item) => item.id) ?? [],
       external_worker_entries:
@@ -1027,10 +1040,11 @@ export function ReportForm({
           toast.error("記入者名を入力してください");
           return;
         }
-        await onSubmit(
+                        await onSubmit(
           {
             ...values,
             reporter_name: isSubcontractor ? values.reporter_name.trim() : reporterName?.trim() ?? values.reporter_name.trim(),
+            site_name: values.site_id === MANUAL_SITE_OPTION ? values.site_name.trim() : "",
             worker_count: values.worker_ids.length + externalCount,
           },
           pendingFiles,
@@ -1104,9 +1118,16 @@ export function ReportForm({
                   data-field-path="site_id"
                   className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
                   value={form.watch("site_id")}
-                  onChange={(event) => form.setValue("site_id", event.target.value, { shouldDirty: true, shouldValidate: true })}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    form.setValue("site_id", nextValue, { shouldDirty: true, shouldValidate: true });
+                    if (nextValue !== MANUAL_SITE_OPTION) {
+                      form.setValue("site_name", "", { shouldDirty: true, shouldValidate: true });
+                    }
+                  }}
                 >
                   <option value="">現場を選択してください</option>
+                  <option value={MANUAL_SITE_OPTION}>現場名を手入力</option>
                   {sites.map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.name}
@@ -1116,6 +1137,17 @@ export function ReportForm({
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
               </div>
               {form.formState.errors.site_id ? <p className="text-sm text-destructive">{form.formState.errors.site_id.message}</p> : null}
+              {form.watch("site_id") === MANUAL_SITE_OPTION ? (
+                <div className="mt-2 space-y-2">
+                  <Input
+                    data-field-path="site_name"
+                    value={form.watch("site_name")}
+                    onChange={(event) => form.setValue("site_name", event.target.value, { shouldDirty: true, shouldValidate: true })}
+                    placeholder="現場名を入力してください"
+                  />
+                  {form.formState.errors.site_name ? <p className="text-sm text-destructive">{form.formState.errors.site_name.message}</p> : null}
+                </div>
+              ) : null}
             </div>
           </div>
 

@@ -11,7 +11,7 @@ import { EmptyState, ErrorState } from "@/components/app/states";
 import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
-import { deletePhoto, deleteReport, getReportDetail, saveReport } from "@/features/reports/report-service";
+import { deletePhoto, deleteReport, displayReportSiteName, getReportDetail, saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
@@ -329,7 +329,7 @@ export function ReportDetailPage() {
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-left break-words">{report.site?.name ?? "現場未設定"}</CardTitle>
+              <CardTitle className="text-left break-words">{displayReportSiteName(report) || "現場未設定"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">

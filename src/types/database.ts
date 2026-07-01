@@ -23,7 +23,8 @@ export type MasterItem = BaseRow & {
 };
 
 export type DailyReport = BaseRow & {
-  site_id: Id;
+  site_id: Id | null;
+  site_name: string | null;
   work_category_id: Id | null;
   report_date: string;
   reporter_name: string | null;
@@ -125,6 +126,7 @@ export type ReportFormValues = {
   report_date: string;
   reporter_name: string;
   site_id: string;
+  site_name: string;
   work_category_id: string;
   worker_count: number;
   worker_ids: string[];

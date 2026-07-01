@@ -26,6 +26,10 @@ function normalizeJoinedItem(value: MasterItem | MasterItem[] | null | undefined
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+function displayReportSiteName(report: { site?: Site | null; site_name?: string | null }) {
+  return report.site_name?.trim() || report.site?.name || "";
+}
+
 export async function listReports(filters: ReportListFilters = {}) {
   let query = supabase
     .from("daily_reports")
@@ -62,6 +66,7 @@ export async function listReports(filters: ReportListFilters = {}) {
     ...(row as Omit<DailyReport, "other_vehicle_entries">),
     other_vehicle_entries: (((row as { other_vehicle_entries?: OtherVehicleEntry[] | null }).other_vehicle_entries ?? []) as OtherVehicleEntry[]),
     site: (row as { sites: Site | null }).sites,
+    site_name: (row as { site_name?: string | null }).site_name ?? null,
     work_category: (row as { work_categories?: MasterItem | null }).work_categories ?? null,
     reporter_name: (row as { reporter_name?: string | null }).reporter_name ?? null,
     creator_display_name: displayNameMap.get((row as { created_by: string }).created_by) ?? null,
@@ -106,6 +111,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     ...report,
     other_vehicle_entries: (report.other_vehicle_entries ?? []) as OtherVehicleEntry[],
     site: report.sites,
+    site_name: report.site_name ?? null,
     work_category: report.work_categories ?? null,
     reporter_name: report.reporter_name ?? null,
     creator_display_name: displayNameMap.get(report.created_by) ?? null,
@@ -192,7 +198,8 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
 
   const { data, error } = await supabase.rpc("save_daily_report", {
     p_report_id: reportId ?? null,
-    p_site_id: values.site_id,
+    p_site_id: values.site_id || null,
+    p_site_name: values.site_name || null,
     p_work_category_id: values.work_category_id,
     p_report_date: values.report_date,
     p_reporter_name: values.reporter_name || null,
@@ -240,6 +247,8 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
 
   return { reportId: savedReportId, uploadErrors };
 }
+
+export { displayReportSiteName };
 
 export async function deletePhoto(photo: ReportPhoto) {
   const { error } = await supabase.from("report_photos").delete().eq("id", photo.id);

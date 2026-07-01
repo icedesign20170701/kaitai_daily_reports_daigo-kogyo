@@ -26,7 +26,8 @@ create table if not exists public.sites (
 
 create table if not exists public.daily_reports (
   id uuid primary key default gen_random_uuid(),
-  site_id uuid not null references public.sites(id),
+  site_id uuid references public.sites(id),
+  site_name text,
   report_date date not null,
   reporter_name text,
   worker_count integer not null check (worker_count > 0),
@@ -60,6 +61,9 @@ alter table public.daily_reports
 
 alter table public.daily_reports
   add column if not exists reporter_name text;
+
+alter table public.daily_reports
+  add column if not exists site_name text;
 
 create table if not exists public.workers (
   id uuid primary key default gen_random_uuid(),
@@ -243,6 +247,7 @@ $$;
 create or replace function public.save_daily_report(
   p_report_id uuid,
   p_site_id uuid,
+  p_site_name text,
   p_work_category_id uuid,
   p_report_date date,
   p_reporter_name text,
@@ -276,6 +281,7 @@ begin
   if p_report_id is null then
     insert into public.daily_reports (
       site_id,
+      site_name,
       work_category_id,
       report_date,
       reporter_name,
@@ -292,6 +298,7 @@ begin
     )
     values (
       p_site_id,
+      p_site_name,
       p_work_category_id,
       p_report_date,
       p_reporter_name,
@@ -315,6 +322,7 @@ begin
     update public.daily_reports
     set
       site_id = p_site_id,
+      site_name = p_site_name,
       work_category_id = p_work_category_id,
       report_date = p_report_date,
       reporter_name = p_reporter_name,

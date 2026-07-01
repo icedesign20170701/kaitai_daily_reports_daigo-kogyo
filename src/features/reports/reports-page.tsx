@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { exportReportsCsv } from "@/features/reports/report-export";
 import { useAuth } from "@/features/auth/auth-context";
 import { listAppUsers } from "@/features/auth/auth-service";
-import { listReports } from "@/features/reports/report-service";
+import { displayReportSiteName, listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
 import type { AppUser, DailyReport, MasterItem, Site } from "@/types/database";
@@ -418,7 +418,7 @@ export function ReportsPage() {
                           <ProgressBadge status={report.progress_status} />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate font-bold">{report.site?.name ?? "現場未設定"}</p>
+                          <p className="truncate font-bold">{displayReportSiteName(report) || "現場未設定"}</p>
                           <p className="mt-1 text-sm text-muted-foreground">工事分類: {report.work_category?.name ?? "未設定"}</p>
                           <p className="mt-1 text-sm text-muted-foreground">
                             区分: {report.work_shift === "night" ? "夜勤" : "昼勤"} / {report.contract_type === "regular" ? "常用" : "請負"}
@@ -452,7 +452,7 @@ export function ReportsPage() {
                       {group.items.map((report, index) => (
                         <TableRow key={report.id} className={cn(index % 2 === 1 && "bg-secondary/20")}>
                           <TableCell className="max-w-0">
-                            <span className="block truncate">{report.site?.name ?? "-"}</span>
+                            <span className="block truncate">{displayReportSiteName(report) || "-"}</span>
                           </TableCell>
                           <TableCell className="max-w-0">
                             <span className="block truncate">{report.work_category?.name ?? "-"}</span>

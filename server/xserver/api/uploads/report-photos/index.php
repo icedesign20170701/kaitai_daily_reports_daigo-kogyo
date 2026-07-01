@@ -56,7 +56,7 @@ if (!is_string($mimeType) || !isset($allowedMimeTypes[$mimeType])) {
 }
 
 $extension = $allowedMimeTypes[$mimeType];
-$uploadRoot = dirname(__DIR__, 4) . '/uploads/report-photos';
+$uploadRoot = dirname(__DIR__, 3) . '/uploads/report-photos';
 $targetDir = $uploadRoot . '/' . $reportId;
 
 if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {

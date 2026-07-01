@@ -37,7 +37,7 @@ if ($filename !== basename($filename)) {
     fail_json(400, 'filename is invalid');
 }
 
-$uploadRoot = dirname(__DIR__, 5) . '/uploads/report-photos';
+$uploadRoot = dirname(__DIR__, 4) . '/uploads/report-photos';
 $targetPath = $uploadRoot . '/' . $matches[1] . '/' . $filename;
 $realRoot = realpath($uploadRoot);
 $realTarget = realpath($targetPath);

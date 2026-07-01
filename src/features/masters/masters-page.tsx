@@ -60,7 +60,7 @@ const masterSchema = z.object({
 type MasterFormValues = z.infer<typeof masterSchema>;
 
 const pageLabels: Record<MasterItemType, { title: string; description: string }> = {
-  worker: { title: "作業員マスタ", description: "大吾興業の従業員一覧です。作業員ラベルに紐づけて管理します。" },
+  worker: { title: "作業員マスタ", description: "従業員一覧です。作業員ラベルに紐づけて管理します。" },
   workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベル、単価、日報入力への表示有無を管理します。" },
   lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
   disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },

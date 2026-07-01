@@ -37,19 +37,37 @@ export function downloadTextFile(filename: string, content: string, mimeType: st
 
 export async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, message = "読み込みがタイムアウトしました"): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let visibilityListener: (() => void) | null = null;
 
   try {
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(new Error(message));
-        }, timeoutMs);
+        const rejectAfterVisibleTimeout = () => {
+          timeoutId = setTimeout(() => {
+            if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+              visibilityListener = () => {
+                document.removeEventListener("visibilitychange", visibilityListener as EventListener);
+                visibilityListener = null;
+                rejectAfterVisibleTimeout();
+              };
+              document.addEventListener("visibilitychange", visibilityListener);
+              return;
+            }
+
+            reject(new Error(message));
+          }, timeoutMs);
+        };
+
+        rejectAfterVisibleTimeout();
       }),
     ]);
   } finally {
     if (timeoutId !== null) {
       clearTimeout(timeoutId);
+    }
+    if (visibilityListener !== null && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", visibilityListener);
     }
   }
 }

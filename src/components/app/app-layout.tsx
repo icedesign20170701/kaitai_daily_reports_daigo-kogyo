@@ -55,9 +55,7 @@ export function AppLayout() {
       <aside className="hidden border-r border-slate-800/70 bg-slate-950 text-slate-100 md:block">
         <div className="sticky top-0 flex h-screen flex-col p-4">
           <div className="mb-8 overflow-hidden rounded-3xl border border-sky-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 px-4 py-5 shadow-soft">
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-sky-300/80">Demolition Ops</p>
-            <p className="mt-2 text-2xl font-extrabold tracking-tight text-white">解体現場日報</p>
-            <p className="mt-2 text-sm text-slate-300">スマホ入力を起点にした現場記録</p>
+            <p className="mt-2 text-2xl font-extrabold tracking-tight text-white">作業日報</p>
           </div>
           <nav className="space-y-2">
             {visibleNavItems.map((item) => (

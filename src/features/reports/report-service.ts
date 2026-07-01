@@ -26,6 +26,27 @@ function normalizeJoinedItem(value: MasterItem | MasterItem[] | null | undefined
   return Array.isArray(value) ? (value[0] ?? null) : value;
 }
 
+function normalizeReportSaveError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return error;
+  }
+
+  const status = "status" in error ? error.status : undefined;
+  const code = "code" in error ? error.code : undefined;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+
+  if (
+    status === 404 ||
+    code === "PGRST202" ||
+    message.includes("save_daily_report") ||
+    message.includes("Could not find the function public.save_daily_report")
+  ) {
+    return new Error("保存処理の Supabase 関数が未反映です。最新の src/supabase.sql を再実行してください。");
+  }
+
+  return error;
+}
+
 function displayReportSiteName(report: { site?: Site | null; site_name?: string | null }) {
   return report.site_name?.trim() || report.site?.name || "";
 }
@@ -218,7 +239,7 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
     p_disposal_entries: values.disposal_entries,
     p_transport_entries: values.transport_entries,
   });
-  if (error) throw error;
+  if (error) throw normalizeReportSaveError(error);
 
   const savedReportId = data as string;
   const uploadErrors: string[] = [];

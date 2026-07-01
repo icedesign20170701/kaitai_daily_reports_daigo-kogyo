@@ -58,12 +58,10 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
   }
 }
 
-// ─── iOS resume: always reload when returning from background ─────────────────
-// iOS freezes all JS when a PWA is backgrounded. Supabase's internal state
-// (session, timers, pending fetches) becomes unreliable on resume regardless
-// of how long the app was hidden. The only fully reliable recovery is a clean
-// page reload. Form drafts and scroll positions are persisted in sessionStorage
-// and are automatically restored after the reload.
+// ─── Resume recovery: reload only after long backgrounding ───────────────────
+// Mobile browsers can leave auth/session state stale after background resume.
+// We only force a reload when the app stayed hidden long enough to justify a
+// clean restart, so short app switches remain uninterrupted.
 //
 // Loop prevention: after a reload the page needs a few seconds to boot. The
 // cooldown key in sessionStorage stops a second reload from firing during that
@@ -72,6 +70,7 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
 
 const RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
 const RELOAD_COOLDOWN_MS = 8_000; // comfortably longer than a typical reload
+const BACKGROUND_RELOAD_THRESHOLD_MS = 60_000;
 
 // Set on module init so the very first pageshow never triggers a reload.
 sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
@@ -88,7 +87,13 @@ function onAppVisible() {
     clearLocks();
     return;
   }
+  const hiddenDuration = Date.now() - hiddenSince;
   hiddenSince = 0;
+
+  if (hiddenDuration < BACKGROUND_RELOAD_THRESHOLD_MS) {
+    clearLocks();
+    return;
+  }
 
   const lastAt = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) ?? 0);
   if (Date.now() - lastAt < RELOAD_COOLDOWN_MS) {

@@ -57,7 +57,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Kaitai Daily Reports</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">株式会社 大吾興業 作業日報</p>
           <CardTitle className="text-2xl">ログイン</CardTitle>
           <CardDescription>メールアドレスとパスワードでサインインします。</CardDescription>
         </CardHeader>

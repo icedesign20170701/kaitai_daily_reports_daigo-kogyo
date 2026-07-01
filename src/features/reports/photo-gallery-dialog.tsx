@@ -58,27 +58,24 @@ export function PhotoGalleryDialog({ photos, openIndex, onOpenIndexChange }: Pho
       <DialogContent className="max-w-5xl border-0 bg-black/95 text-white">
         <DialogTitle className="sr-only">写真プレビュー</DialogTitle>
         <div className="flex min-h-[55vh] flex-col gap-4">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center">
+          <div className="flex min-h-0 flex-1 items-center justify-center">
             <img src={currentPhoto.url} alt={currentPhoto.name} className="max-h-[75vh] w-auto max-w-full rounded-lg object-contain" />
-
-            {hasMultiplePhotos ? (
-              <>
-                <Button type="button" variant="secondary" size="icon" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 text-foreground shadow-lg" onClick={showPrevious}>
-                  <ChevronLeft className="h-5 w-5" />
-                  <span className="sr-only">前の写真</span>
-                </Button>
-                <Button type="button" variant="secondary" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 text-foreground shadow-lg" onClick={showNext}>
-                  <ChevronRight className="h-5 w-5" />
-                  <span className="sr-only">次の写真</span>
-                </Button>
-              </>
-            ) : null}
           </div>
 
           {hasMultiplePhotos ? (
-            <p className="text-center text-sm text-white/80">
-              {currentIndex + 1} / {photos.length}
-            </p>
+            <div className="flex items-center justify-center gap-4">
+              <Button type="button" variant="secondary" size="icon" className="rounded-full bg-white/90 text-foreground shadow-lg" onClick={showPrevious}>
+                <ChevronLeft className="h-5 w-5" />
+                <span className="sr-only">前の写真</span>
+              </Button>
+              <p className="min-w-16 text-center text-sm text-white/80">
+                {currentIndex + 1} / {photos.length}
+              </p>
+              <Button type="button" variant="secondary" size="icon" className="rounded-full bg-white/90 text-foreground shadow-lg" onClick={showNext}>
+                <ChevronRight className="h-5 w-5" />
+                <span className="sr-only">次の写真</span>
+              </Button>
+            </div>
           ) : null}
         </div>
       </DialogContent>

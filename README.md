@@ -129,13 +129,13 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_FILE_UPLOAD_URL=https://report.daigo-kogyo.com/api/uploads/report-photos
+VITE_FILE_UPLOAD_URL=https://report.daigo-kogyo.com/api/uploads/report-photos/
 ```
 
 必要に応じて以下も設定します。
 
 ```env
-VITE_FILE_DELETE_URL=https://report.daigo-kogyo.com/api/uploads/report-photos/delete
+VITE_FILE_DELETE_URL=https://report.daigo-kogyo.com/api/uploads/report-photos/delete/
 VITE_FILE_API_TOKEN=your-api-token
 ```
 
@@ -223,10 +223,10 @@ XSERVER などのPHPサーバーで使う場合は、以下をサーバーのド
 
 ```text
 server/xserver/api/uploads/report-photos/index.php
-  -> https://report.daigo-kogyo.com/api/uploads/report-photos
+  -> https://report.daigo-kogyo.com/api/uploads/report-photos/
 
 server/xserver/api/uploads/report-photos/delete/index.php
-  -> https://report.daigo-kogyo.com/api/uploads/report-photos/delete
+  -> https://report.daigo-kogyo.com/api/uploads/report-photos/delete/
 ```
 
 アップロードされた画像は、サーバー上の `/uploads/report-photos/{reportId}/` に保存されます。

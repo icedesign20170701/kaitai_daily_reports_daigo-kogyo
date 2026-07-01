@@ -14,6 +14,10 @@ function buildHeaders() {
   return headers;
 }
 
+function normalizeEndpointUrl(url: string) {
+  return url.endsWith("/") ? url : `${url}/`;
+}
+
 export const storageService = {
   async uploadReportPhoto(file: File, reportId: string) {
     if (!uploadUrl) {
@@ -24,7 +28,7 @@ export const storageService = {
     formData.append("file", file);
     formData.append("reportId", reportId);
 
-    const response = await fetch(uploadUrl, {
+    const response = await fetch(normalizeEndpointUrl(uploadUrl), {
       method: "POST",
       headers: buildHeaders(),
       body: formData,
@@ -52,7 +56,7 @@ export const storageService = {
       return;
     }
 
-    const response = await fetch(deleteUrl, {
+    const response = await fetch(normalizeEndpointUrl(deleteUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

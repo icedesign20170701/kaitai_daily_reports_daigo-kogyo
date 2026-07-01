@@ -787,6 +787,20 @@ export function ReportForm({
   });
 
   useEffect(() => {
+    if (isSubcontractor || initialReport || !reporterName?.trim()) {
+      return;
+    }
+
+    const currentReporterName = form.getValues("reporter_name").trim();
+    if (!currentReporterName) {
+      form.setValue("reporter_name", reporterName.trim(), {
+        shouldDirty: false,
+        shouldValidate: Boolean(form.formState.errors.reporter_name),
+      });
+    }
+  }, [form, initialReport, isSubcontractor, reporterName]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || restoredDraftKeyRef.current === draftKey) {
       return;
     }
@@ -1040,10 +1054,10 @@ export function ReportForm({
           toast.error("記入者名を入力してください");
           return;
         }
-                        await onSubmit(
+        await onSubmit(
           {
             ...values,
-            reporter_name: isSubcontractor ? values.reporter_name.trim() : reporterName?.trim() ?? values.reporter_name.trim(),
+            reporter_name: isSubcontractor ? values.reporter_name.trim() : reporterName?.trim() || values.reporter_name.trim(),
             site_name: values.site_id === MANUAL_SITE_OPTION ? values.site_name.trim() : "",
             worker_count: values.worker_ids.length + externalCount,
           },

@@ -129,19 +129,19 @@ cp .env.example .env
 ```env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_FILE_UPLOAD_URL=https://your-upload-server.example.com/api/uploads/report-photos
+VITE_FILE_UPLOAD_URL=https://report.daigo-kogyo.com/api/uploads/report-photos
 ```
 
 必要に応じて以下も設定します。
 
 ```env
-VITE_FILE_DELETE_URL=https://your-upload-server.example.com/api/uploads/report-photos/delete
+VITE_FILE_DELETE_URL=https://report.daigo-kogyo.com/api/uploads/report-photos/delete
 VITE_FILE_API_TOKEN=your-api-token
 ```
 
 4. Supabase SQL を実行
 
-Supabase の SQL Editor で最新の [src/supabase.sql](/Users/yuma/Documents/develop/kaitai_daily_reports/src/supabase.sql) を実行してください。  
+Supabase の SQL Editor で最新の [src/supabase.sql](/Users/yuma/Documents/develop/kaitai_daily_reports_daigo-kogyo/src/supabase.sql) を実行してください。  
 既存環境に追加機能を反映する場合も、最新 SQL の再実行が必要です。
 
 最近の重要な変更:
@@ -166,6 +166,8 @@ npm run dev
 
 ## Vercel デプロイ時の設定
 
+このプロジェクトは `https://report.daigo-kogyo.com/` で運用する前提です。
+
 Vercel の Environment Variables に以下を設定してください。
 
 - `VITE_SUPABASE_URL`
@@ -176,6 +178,8 @@ Vercel の Environment Variables に以下を設定してください。
 
 `vercel.json` は SPA rewrite 用です。  
 `/login` や `/reports/...` へ直接アクセスしても `index.html` に返す前提です。
+
+Vercel の Domains には `report.daigo-kogyo.com` を追加してください。Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
 
 ## 画面一覧
 
@@ -226,7 +230,7 @@ do update set is_subcontractor = excluded.is_subcontractor;
 レスポンス例:
 
 ```json
-{ "url": "https://files.example.com/reports/abc/photo-1.jpg" }
+{ "url": "https://report.daigo-kogyo.com/reports/abc/photo-1.jpg" }
 ```
 
 ### 削除
@@ -237,7 +241,7 @@ do update set is_subcontractor = excluded.is_subcontractor;
 リクエスト例:
 
 ```json
-{ "url": "https://files.example.com/reports/abc/photo-1.jpg" }
+{ "url": "https://report.daigo-kogyo.com/reports/abc/photo-1.jpg" }
 ```
 
 `VITE_FILE_API_TOKEN` を設定すると `Authorization: Bearer ...` を付けます。

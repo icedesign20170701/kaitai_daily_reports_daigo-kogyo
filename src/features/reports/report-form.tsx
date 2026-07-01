@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/auth-context";
+import { PhotoGalleryDialog, type GalleryPhoto } from "@/features/reports/photo-gallery-dialog";
 import { compressImageFile } from "@/lib/image-compression";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, toDateInputValue } from "@/lib/utils";
@@ -234,15 +235,23 @@ function scrollToError(path: string) {
 function PhotoPreview({
   photo,
   onRemove,
+  onOpen,
 }: {
   photo: { id: string; url: string; name: string };
   onRemove: () => void;
+  onOpen: () => void;
 }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border bg-card">
-      <img src={photo.url} alt={photo.name} className="h-32 w-full object-cover" />
-      <button type="button" className="absolute right-2 top-2 rounded-full bg-black/60 p-2 text-white" onClick={onRemove}>
+      <button type="button" className="block w-full" onClick={onOpen}>
+        <img src={photo.url} alt={photo.name} className="h-32 w-full object-cover" />
+      </button>
+      <button type="button" className="absolute right-2 top-2 rounded-full bg-black/60 p-2 text-white" onClick={(event) => {
+        event.stopPropagation();
+        onRemove();
+      }}>
         <Trash2 className="h-4 w-4" />
+        <span className="sr-only">写真を削除</span>
       </button>
     </div>
   );
@@ -952,6 +961,7 @@ export function ReportForm({
   );
 
   const [previewPhotos, setPreviewPhotos] = useState<Array<{ id: string; index: number; name: string; url: string }>>([]);
+  const [photoGalleryIndex, setPhotoGalleryIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const photos = pendingFiles.map((file, index) => ({
@@ -972,6 +982,10 @@ export function ReportForm({
       ...photo,
       url: storageService.getPublicUrl(photo.image_path),
     })) ?? [];
+  const galleryPhotos: GalleryPhoto[] = [
+    ...existingPhotos.map((photo) => ({ id: photo.id, url: photo.url, name: "登録済み写真" })),
+    ...previewPhotos.map((photo) => ({ id: photo.id, url: photo.url, name: photo.name })),
+  ];
 
   const updateWorkerSelection = (itemId: string, checked: boolean) => {
     form.setValue("worker_ids", checked ? [...workerIds, itemId] : workerIds.filter((value) => value !== itemId), {
@@ -1345,7 +1359,12 @@ export function ReportForm({
                 <p className="text-sm font-semibold">登録済み写真</p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {existingPhotos.map((photo) => (
-                    <PhotoPreview key={photo.id} photo={{ id: photo.id, url: photo.url, name: "登録済み写真" }} onRemove={() => void onDeleteExistingPhoto?.(photo)} />
+                    <PhotoPreview
+                      key={photo.id}
+                      photo={{ id: photo.id, url: photo.url, name: "登録済み写真" }}
+                      onOpen={() => setPhotoGalleryIndex(galleryPhotos.findIndex((galleryPhoto) => galleryPhoto.id === photo.id))}
+                      onRemove={() => void onDeleteExistingPhoto?.(photo)}
+                    />
                   ))}
                 </div>
               </div>
@@ -1356,11 +1375,18 @@ export function ReportForm({
                 <p className="text-sm font-semibold">アップロード予定</p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {previewPhotos.map((photo) => (
-                    <PhotoPreview key={photo.id} photo={photo} onRemove={() => setPendingFiles((current) => current.filter((_, index) => index !== photo.index))} />
+                    <PhotoPreview
+                      key={photo.id}
+                      photo={photo}
+                      onOpen={() => setPhotoGalleryIndex(galleryPhotos.findIndex((galleryPhoto) => galleryPhoto.id === photo.id))}
+                      onRemove={() => setPendingFiles((current) => current.filter((_, index) => index !== photo.index))}
+                    />
                   ))}
                 </div>
               </div>
             ) : null}
+
+            <PhotoGalleryDialog photos={galleryPhotos} openIndex={photoGalleryIndex} onOpenIndexChange={setPhotoGalleryIndex} />
           </FieldBlock>
         </CardContent>
       </Card>

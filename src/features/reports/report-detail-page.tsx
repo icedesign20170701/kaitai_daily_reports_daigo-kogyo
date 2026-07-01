@@ -10,6 +10,7 @@ import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
 import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
+import { PhotoGalleryDialog, type GalleryPhoto } from "@/features/reports/photo-gallery-dialog";
 import { ReportForm } from "@/features/reports/report-form";
 import { deletePhoto, deleteReport, displayReportSiteName, getReportDetail, saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
@@ -134,6 +135,7 @@ export function ReportDetailPage() {
   const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
+  const [photoGalleryIndex, setPhotoGalleryIndex] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -279,6 +281,12 @@ export function ReportDetailPage() {
     [report?.external_worker_entries, report?.workers, workerLabels],
   );
   const workerCostTotal = useMemo(() => workerCostRows.reduce((sum, row) => sum + row.subtotal, 0), [workerCostRows]);
+  const detailPhotos: GalleryPhoto[] =
+    report?.photos.map((photo, index) => ({
+      id: photo.id,
+      url: storageService.getPublicUrl(photo.image_path),
+      name: `日報写真 ${index + 1}`,
+    })) ?? [];
 
   return (
     <PageShell>
@@ -410,13 +418,16 @@ export function ReportDetailPage() {
                 <p className="text-sm text-muted-foreground">写真は登録されていません。</p>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {report.photos.map((photo) => (
+                  {report.photos.map((photo, index) => (
                     <div key={photo.id} className="overflow-hidden rounded-2xl border bg-background">
-                      <img src={storageService.getPublicUrl(photo.image_path)} alt="日報写真" className="h-44 w-full object-cover" />
+                      <button type="button" className="block w-full" onClick={() => setPhotoGalleryIndex(index)}>
+                        <img src={storageService.getPublicUrl(photo.image_path)} alt={`日報写真 ${index + 1}`} className="h-44 w-full object-cover" />
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
+              <PhotoGalleryDialog photos={detailPhotos} openIndex={photoGalleryIndex} onOpenIndexChange={setPhotoGalleryIndex} />
             </CardContent>
           </Card>
 

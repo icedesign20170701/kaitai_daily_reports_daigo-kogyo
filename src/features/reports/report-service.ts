@@ -216,10 +216,11 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
 
 export async function saveReport(values: ReportFormValues, _userId: string, reportId?: string, newFiles: File[] = []): Promise<SaveReportResult> {
   const otherVehicleEntries = values.other_vehicle_entries.filter((entry) => entry.label.trim() && entry.count > 0);
+  const siteId = values.site_id === "__manual__" ? null : values.site_id || null;
 
   const { data, error } = await supabase.rpc("save_daily_report", {
     p_report_id: reportId ?? null,
-    p_site_id: values.site_id || null,
+    p_site_id: siteId,
     p_site_name: values.site_name || null,
     p_work_category_id: values.work_category_id,
     p_report_date: values.report_date,

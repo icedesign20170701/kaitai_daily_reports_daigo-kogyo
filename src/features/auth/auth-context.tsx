@@ -14,6 +14,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -116,6 +117,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       window.clearTimeout(loadingTimeout);
       subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      return;
+    }
+
+    let hiddenAt = 0;
+
+    const forceLocalSignOut = async () => {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      setSession(null);
+      setUser(null);
+      setAppUser(null);
+      setLoading(false);
+    };
+
+    const handleHidden = () => {
+      hiddenAt = Date.now();
+    };
+
+    const handleVisible = () => {
+      if (hiddenAt === 0) {
+        return;
+      }
+
+      const hiddenDuration = Date.now() - hiddenAt;
+      hiddenAt = 0;
+      if (hiddenDuration >= BACKGROUND_SIGN_OUT_MS) {
+        void forceLocalSignOut();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        handleHidden();
+        return;
+      }
+      handleVisible();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", handleHidden);
+    window.addEventListener("pageshow", handleVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", handleHidden);
+      window.removeEventListener("pageshow", handleVisible);
     };
   }, []);
 

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { recoverSupabaseConnection } from "@/lib/supabase";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -105,6 +106,7 @@ export async function withSupabaseRecovery<T>(
     if (!isRecoverableLoadError(error)) {
       throw error;
     }
+    await recoverSupabaseConnection();
     await sleep(250);
     return withTimeout(Promise.resolve(loader()), timeoutMs, message);
   }

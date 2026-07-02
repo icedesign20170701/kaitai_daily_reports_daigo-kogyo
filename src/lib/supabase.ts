@@ -58,22 +58,10 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
   }
 }
 
-// ─── Resume recovery: reload only after long backgrounding ───────────────────
+// ─── Resume recovery ─────────────────────────────────────────────────────────
 // Mobile browsers can leave auth/session state stale after background resume.
-// We only force a reload when the app stayed hidden long enough to justify a
-// clean restart, so short app switches remain uninterrupted.
-//
-// Loop prevention: after a reload the page needs a few seconds to boot. The
-// cooldown key in sessionStorage stops a second reload from firing during that
-// window. sessionStorage is cleared when the tab is closed, so the cooldown
-// never carries over to a fresh launch.
-
-const RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
-const RELOAD_COOLDOWN_MS = 8_000; // comfortably longer than a typical reload
-const BACKGROUND_RELOAD_THRESHOLD_MS = 60_000;
-
-// Set on module init so the very first pageshow never triggers a reload.
-sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
+// On resume we clear auth locks and let data loaders retry cleanly. We do not
+// force a reload here because auth owns the 5-minute background sign-out rule.
 
 let hiddenSince = 0;
 
@@ -90,20 +78,8 @@ function onAppVisible() {
   const hiddenDuration = Date.now() - hiddenSince;
   hiddenSince = 0;
 
-  if (hiddenDuration < BACKGROUND_RELOAD_THRESHOLD_MS) {
-    clearLocks();
-    return;
-  }
-
-  const lastAt = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) ?? 0);
-  if (Date.now() - lastAt < RELOAD_COOLDOWN_MS) {
-    // Page was just reloaded — skip to avoid a reload loop.
-    clearLocks();
-    return;
-  }
-
-  sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(Date.now()));
-  window.location.reload();
+  clearLocks();
+  window.dispatchEvent(new CustomEvent("kaitai:supabase-resume", { detail: { hiddenDuration } }));
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -141,3 +117,8 @@ export const supabase =
     window.__kaitaiSupabaseClient = client;
     return client;
   })();
+
+export async function recoverSupabaseConnection() {
+  clearLocks();
+  await supabase.auth.getSession().catch(() => undefined);
+}

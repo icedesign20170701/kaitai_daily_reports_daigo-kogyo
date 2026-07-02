@@ -157,7 +157,8 @@ function send_email(array $config, string $subject, string $message): bool
     $headers = [
         'From: ' . $from,
         'Reply-To: ' . $from,
-        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Type: text/plain; charset=ISO-2022-JP',
+        'Content-Transfer-Encoding: 7bit',
     ];
     $additionalParams = '-f' . $from;
 
@@ -171,6 +172,11 @@ function send_email(array $config, string $subject, string $message): bool
         $sent = mb_send_mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
         log_notification('mb_send_mail result=' . ($sent ? 'success' : 'failure') . ' to_count=' . (string)count($to));
         return $sent;
+    }
+
+    if (function_exists('mb_convert_encoding') && function_exists('mb_encode_mimeheader')) {
+        $subject = mb_encode_mimeheader($subject, 'ISO-2022-JP', 'B', "\r\n");
+        $message = mb_convert_encoding($message, 'ISO-2022-JP', 'UTF-8');
     }
 
     $sent = mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);

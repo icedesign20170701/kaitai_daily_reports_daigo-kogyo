@@ -102,35 +102,6 @@ export function UserAdminPage() {
     void load();
   }, [isMaster, load]);
 
-  useEffect(() => {
-    if (!isMaster) {
-      return;
-    }
-
-    const retryIfStillLoading = () => {
-      if (document.visibilityState === "hidden" || !loading) {
-        return;
-      }
-      void load();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        retryIfStillLoading();
-      }
-    };
-
-    window.addEventListener("focus", retryIfStillLoading);
-    window.addEventListener("pageshow", retryIfStillLoading);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", retryIfStillLoading);
-      window.removeEventListener("pageshow", retryIfStillLoading);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [isMaster, load, loading]);
-
   const openEdit = (user: AppUser) => {
     setEditingUser(user);
     form.reset({

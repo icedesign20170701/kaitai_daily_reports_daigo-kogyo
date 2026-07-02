@@ -178,31 +178,6 @@ export function ReportDetailPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const retryIfStillLoading = () => {
-      if (document.visibilityState === "hidden" || !loading) {
-        return;
-      }
-      void load();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        retryIfStillLoading();
-      }
-    };
-
-    window.addEventListener("focus", retryIfStillLoading);
-    window.addEventListener("pageshow", retryIfStillLoading);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", retryIfStillLoading);
-      window.removeEventListener("pageshow", retryIfStillLoading);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [load, loading]);
-
   const reload = async () => {
     if (!id) return;
     try {

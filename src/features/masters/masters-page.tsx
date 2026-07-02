@@ -148,31 +148,6 @@ export function MastersPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const retryIfStillLoading = () => {
-      if (document.visibilityState === "hidden" || !loading) {
-        return;
-      }
-      void load();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        retryIfStillLoading();
-      }
-    };
-
-    window.addEventListener("focus", retryIfStillLoading);
-    window.addEventListener("pageshow", retryIfStillLoading);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener("focus", retryIfStillLoading);
-      window.removeEventListener("pageshow", retryIfStillLoading);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [load, loading]);
-
   const openCreate = () => {
     setEditingItem(null);
     form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });

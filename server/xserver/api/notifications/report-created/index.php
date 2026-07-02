@@ -46,25 +46,6 @@ function bearer_token(): string
     return trim($matches[1]);
 }
 
-function post_json(string $url, array $headers, array $payload): array
-{
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => $headers,
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        CURLOPT_TIMEOUT => 10,
-    ]);
-
-    $body = curl_exec($ch);
-    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    return ['status' => $status, 'body' => is_string($body) ? $body : '', 'error' => $error];
-}
-
 function get_json(string $url, array $headers): array
 {
     $ch = curl_init($url);
@@ -149,37 +130,6 @@ function send_email(array $config, string $subject, string $message): bool
     return mail(implode(',', $to), $subject, $message, implode("\r\n", $headers));
 }
 
-function send_line(array $config, string $message): bool
-{
-    $token = (string)($config['line_channel_access_token'] ?? '');
-    $targets = $config['line_to'] ?? [];
-    if ($token === '' || !is_array($targets) || count($targets) === 0) {
-        return true;
-    }
-
-    foreach ($targets as $target) {
-        if (!is_string($target) || trim($target) === '') {
-            continue;
-        }
-
-        $response = post_json('https://api.line.me/v2/bot/message/push', [
-            'Content-Type: application/json',
-            'Authorization: Bearer ' . $token,
-        ], [
-            'to' => trim($target),
-            'messages' => [
-                ['type' => 'text', 'text' => $message],
-            ],
-        ]);
-
-        if ($response['status'] < 200 || $response['status'] >= 300) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 $config = load_config();
 verify_supabase_user($config, bearer_token());
 
@@ -197,9 +147,8 @@ if (!preg_match('/^[0-9a-fA-F-]{36}$/', $reportId)) {
 $message = build_message($payload);
 $subject = '日報が送信されました';
 $mailOk = send_email($config, $subject, $message);
-$lineOk = send_line($config, $message);
 
-if (!$mailOk || !$lineOk) {
+if (!$mailOk) {
     fail_json(502, 'notification delivery failed');
 }
 

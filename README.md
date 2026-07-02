@@ -261,7 +261,7 @@ server/xserver/api/uploads/report-photos/delete/index.php
 
 ## 日報送信通知 API
 
-日報の新規送信後にLINEとメールへ通知する場合は、以下をサーバーへ配置してください。
+日報の新規送信後にメールへ通知する場合は、以下をサーバーへ配置してください。
 
 ```text
 server/xserver/api/notifications/report-created/index.php
@@ -281,10 +281,7 @@ server/xserver/api/notifications/report-created/config.php
 - `supabase_anon_key`
 - `mail_to`
 - `mail_from`
-- `line_channel_access_token`
-- `line_to`
 
-LINEはLINE Messaging APIを使います。`line_to` にはユーザーID、グループID、またはルームIDを設定してください。
 通知APIは、アプリから送られるSupabaseのログインJWTを検証してから通知を送信します。
 
 ## 補足
@@ -306,6 +303,5 @@ npm run build
 ## 今後の拡張候補
 
 - `company_id` 追加によるマルチテナント化
-- LINE 通知
 - PWA 化
 - 画像圧縮

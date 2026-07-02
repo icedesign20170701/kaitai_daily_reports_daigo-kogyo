@@ -103,8 +103,20 @@ function require_string(array $payload, string $key): string
     return trim($value);
 }
 
-function build_message(array $payload): string
+function report_url(array $config, string $reportId): string
 {
+    $appUrl = rtrim((string)($config['app_url'] ?? 'https://report.daigo-kogyo.com'), '/');
+    if (!filter_var($appUrl, FILTER_VALIDATE_URL)) {
+        fail_json(500, 'app_url is invalid');
+    }
+
+    return $appUrl . '/reports/' . rawurlencode($reportId);
+}
+
+function build_message(array $config, array $payload): string
+{
+    $reportId = require_string($payload, 'reportId');
+
     return implode("\n", [
         '日報が送信されました。',
         '',
@@ -112,7 +124,8 @@ function build_message(array $payload): string
         '現場: ' . require_string($payload, 'siteName'),
         '工事分類: ' . require_string($payload, 'workCategoryName'),
         '記入者: ' . require_string($payload, 'reporterName'),
-        '日報ID: ' . require_string($payload, 'reportId'),
+        '日報URL: ' . report_url($config, $reportId),
+        '日報ID: ' . $reportId,
     ]);
 }
 
@@ -198,7 +211,7 @@ if (!preg_match('/^[0-9a-fA-F-]{36}$/', $reportId)) {
     fail_json(400, 'reportId is invalid');
 }
 
-$message = build_message($payload);
+$message = build_message($config, $payload);
 $subject = '日報が送信されました';
 $mailOk = send_email($config, $subject, $message);
 

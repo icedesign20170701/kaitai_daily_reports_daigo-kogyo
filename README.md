@@ -277,6 +277,7 @@ server/xserver/api/notifications/report-created/config.php
 
 設定する主な値:
 
+- `app_url`: アプリのURL。通知メールの日報URL生成に使います
 - `supabase_url`
 - `supabase_anon_key`
 - `mail_to`: 通知を受け取る実在のメールアドレス

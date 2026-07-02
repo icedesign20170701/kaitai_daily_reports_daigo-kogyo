@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { BACKGROUND_SIGN_OUT_REQUEST_KEY, isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { AppUser } from "@/types/database";
 
 type AuthContextValue = {
@@ -37,6 +37,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     }, 4000);
     let appUserRequestId = 0;
+    const shouldForceLocalSignOut = localStorage.getItem(BACKGROUND_SIGN_OUT_REQUEST_KEY) === "1";
+    if (shouldForceLocalSignOut) {
+      localStorage.removeItem(BACKGROUND_SIGN_OUT_REQUEST_KEY);
+      void supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      setSession(null);
+      setUser(null);
+      setAppUser(null);
+      setLoading(false);
+    }
 
     const loadAppUser = async (currentUser: User | null) => {
       const requestId = ++appUserRequestId;
@@ -97,6 +106,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
       try {
         if (!mounted) {
+          return;
+        }
+        if (shouldForceLocalSignOut) {
+          setSession(null);
+          setUser(null);
+          setAppUser(null);
           return;
         }
         setSession(nextSession);

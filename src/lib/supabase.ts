@@ -60,21 +60,17 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
 
 // ─── Resume recovery ─────────────────────────────────────────────────────────
 // Browsers can leave unresolved fetch/auth state alive after background resume,
-// especially on mobile and long-suspended desktop tabs. Restart after a real
-// background so the app returns with a clean Supabase client.
+// especially on mobile and suspended desktop tabs. Restart after every actual
+// background transition so the app returns with a clean Supabase client.
 
 let hiddenSince = 0;
-const RESUME_RELOAD_THRESHOLD_MS = 1500;
-const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
 const RESUME_RELOAD_COOLDOWN_MS = 8000;
 const RESUME_RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
+const HIDDEN_AT_KEY = "kaitai-hidden-at";
+export const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
 export const BACKGROUND_SIGN_OUT_REQUEST_KEY = "kaitai-background-signout-requested";
 
 function reloadAfterResume(hiddenDuration: number) {
-  if (hiddenDuration < RESUME_RELOAD_THRESHOLD_MS) {
-    return false;
-  }
-
   const lastReloadAt = Number(sessionStorage.getItem(RESUME_RELOAD_COOLDOWN_KEY) ?? 0);
   if (Date.now() - lastReloadAt < RESUME_RELOAD_COOLDOWN_MS) {
     return false;
@@ -91,22 +87,26 @@ function reloadAfterResume(hiddenDuration: number) {
 
 function onAppHidden() {
   hiddenSince = Date.now();
+  sessionStorage.setItem(HIDDEN_AT_KEY, String(hiddenSince));
 }
 
 function onAppVisible() {
-  if (hiddenSince === 0) {
+  const storedHiddenAt = Number(sessionStorage.getItem(HIDDEN_AT_KEY) ?? 0);
+  const startedAt = hiddenSince || storedHiddenAt;
+
+  if (startedAt === 0) {
     // Not returning from background (e.g. initial pageshow) — just clear locks.
     clearLocks();
     return;
   }
-  const hiddenDuration = Date.now() - hiddenSince;
+  const hiddenDuration = Math.max(0, Date.now() - startedAt);
   hiddenSince = 0;
+  sessionStorage.removeItem(HIDDEN_AT_KEY);
 
   clearLocks();
   if (reloadAfterResume(hiddenDuration)) {
     return;
   }
-  window.dispatchEvent(new CustomEvent("kaitai:supabase-resume", { detail: { hiddenDuration } }));
 }
 
 document.addEventListener("visibilitychange", () => {

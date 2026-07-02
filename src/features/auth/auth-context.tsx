@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { BACKGROUND_SIGN_OUT_REQUEST_KEY, isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { BACKGROUND_SIGN_OUT_MS, BACKGROUND_SIGN_OUT_REQUEST_KEY, isSupabaseConfigured, supabase } from "@/lib/supabase";
 import type { AppUser } from "@/types/database";
 
 type AuthContextValue = {
@@ -14,8 +14,6 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);

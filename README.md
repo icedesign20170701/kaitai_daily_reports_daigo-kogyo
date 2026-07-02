@@ -164,11 +164,11 @@ Supabase の SQL Editor で最新の [src/supabase.sql](/Users/yuma/Documents/de
 npm run dev
 ```
 
-## Vercel デプロイ時の設定
+## 自前サーバーでの公開設定
 
 このプロジェクトは `https://report.daigo-kogyo.com/` で運用する前提です。
 
-Vercel の Environment Variables に以下を設定してください。
+ビルド時の環境変数に以下を設定してください。
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
@@ -176,10 +176,8 @@ Vercel の Environment Variables に以下を設定してください。
 - `VITE_FILE_DELETE_URL` 任意
 - `VITE_FILE_API_TOKEN` 任意
 
-`vercel.json` は SPA rewrite 用です。  
-`/login` や `/reports/...` へ直接アクセスしても `index.html` に返す前提です。
-
-Vercel の Domains には `report.daigo-kogyo.com` を追加してください。Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
+`/login` や `/reports/...` へ直接アクセスした場合も `index.html` を返すように、Webサーバー側でSPA fallbackを設定してください。
+Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
 
 ## 画面一覧
 

@@ -59,31 +59,24 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
 }
 
 // ─── Resume recovery ─────────────────────────────────────────────────────────
-// Mobile browsers can leave auth/session state stale after background resume.
-// iOS Safari/PWA is especially prone to keeping unresolved fetch/auth state
-// alive after resume, so we restart only that platform after a real background.
+// Browsers can leave unresolved fetch/auth state alive after background resume,
+// especially on mobile and long-suspended desktop tabs. Restart after a real
+// background so the app returns with a clean Supabase client.
 
 let hiddenSince = 0;
-const IOS_RESUME_RELOAD_THRESHOLD_MS = 1500;
+const RESUME_RELOAD_THRESHOLD_MS = 1500;
 const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
-const IOS_RELOAD_COOLDOWN_MS = 8000;
-const IOS_RELOAD_COOLDOWN_KEY = "kaitai-ios-resume-reload-at";
+const RESUME_RELOAD_COOLDOWN_MS = 8000;
+const RESUME_RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
 export const BACKGROUND_SIGN_OUT_REQUEST_KEY = "kaitai-background-signout-requested";
 
-function isIosBrowser() {
-  const platform = navigator.platform || "";
-  const userAgent = navigator.userAgent || "";
-  const isTouchMac = platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  return /iPad|iPhone|iPod/.test(userAgent) || isTouchMac;
-}
-
-function reloadIosAfterResume(hiddenDuration: number) {
-  if (!isIosBrowser() || hiddenDuration < IOS_RESUME_RELOAD_THRESHOLD_MS) {
+function reloadAfterResume(hiddenDuration: number) {
+  if (hiddenDuration < RESUME_RELOAD_THRESHOLD_MS) {
     return false;
   }
 
-  const lastReloadAt = Number(sessionStorage.getItem(IOS_RELOAD_COOLDOWN_KEY) ?? 0);
-  if (Date.now() - lastReloadAt < IOS_RELOAD_COOLDOWN_MS) {
+  const lastReloadAt = Number(sessionStorage.getItem(RESUME_RELOAD_COOLDOWN_KEY) ?? 0);
+  if (Date.now() - lastReloadAt < RESUME_RELOAD_COOLDOWN_MS) {
     return false;
   }
 
@@ -91,7 +84,7 @@ function reloadIosAfterResume(hiddenDuration: number) {
     localStorage.setItem(BACKGROUND_SIGN_OUT_REQUEST_KEY, "1");
   }
 
-  sessionStorage.setItem(IOS_RELOAD_COOLDOWN_KEY, String(Date.now()));
+  sessionStorage.setItem(RESUME_RELOAD_COOLDOWN_KEY, String(Date.now()));
   window.location.reload();
   return true;
 }
@@ -110,7 +103,7 @@ function onAppVisible() {
   hiddenSince = 0;
 
   clearLocks();
-  if (reloadIosAfterResume(hiddenDuration)) {
+  if (reloadAfterResume(hiddenDuration)) {
     return;
   }
   window.dispatchEvent(new CustomEvent("kaitai:supabase-resume", { detail: { hiddenDuration } }));

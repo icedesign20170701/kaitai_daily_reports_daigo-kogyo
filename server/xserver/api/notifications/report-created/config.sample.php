@@ -8,5 +8,5 @@ return [
     'mail_to' => [
         'recipient@example.com',
     ],
-    'mail_from' => 'no-reply@report.daigo-kogyo.com',
+    'mail_from' => 'sender@example.com',
 ];

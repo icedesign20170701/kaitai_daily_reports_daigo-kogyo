@@ -279,10 +279,11 @@ server/xserver/api/notifications/report-created/config.php
 
 - `supabase_url`
 - `supabase_anon_key`
-- `mail_to`
-- `mail_from`
+- `mail_to`: 通知を受け取る実在のメールアドレス
+- `mail_from`: 送信元として使う実在のメールアドレス
 
 通知APIは、アプリから送られるSupabaseのログインJWTを検証してから通知を送信します。
+XSERVERで送信する場合は、`mail_from` に同サーバーで作成済みのメールアドレスを設定してください。
 
 ## 補足
 

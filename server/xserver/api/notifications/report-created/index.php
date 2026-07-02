@@ -104,18 +104,50 @@ function build_message(array $payload): string
     ]);
 }
 
-function send_email(array $config, string $subject, string $message): bool
+function configured_recipients(array $config): array
 {
     $to = $config['mail_to'] ?? [];
     if (!is_array($to) || count($to) === 0) {
-        return true;
+        fail_json(500, 'mail_to is missing');
     }
 
-    $from = (string)($config['mail_from'] ?? 'no-reply@report.daigo-kogyo.com');
+    $recipients = [];
+    foreach ($to as $address) {
+        if (!is_string($address)) {
+            fail_json(500, 'mail_to is invalid');
+        }
+
+        $address = trim($address);
+        if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
+            fail_json(500, 'mail_to is invalid');
+        }
+
+        $recipients[] = $address;
+    }
+
+    return $recipients;
+}
+
+function configured_sender(array $config): string
+{
+    $from = trim((string)($config['mail_from'] ?? ''));
+    if (!filter_var($from, FILTER_VALIDATE_EMAIL)) {
+        fail_json(500, 'mail_from is invalid');
+    }
+
+    return $from;
+}
+
+function send_email(array $config, string $subject, string $message): bool
+{
+    $to = configured_recipients($config);
+    $from = configured_sender($config);
     $headers = [
         'From: ' . $from,
+        'Reply-To: ' . $from,
         'Content-Type: text/plain; charset=UTF-8',
     ];
+    $additionalParams = '-f' . $from;
 
     if (function_exists('mb_language')) {
         mb_language('Japanese');
@@ -124,10 +156,10 @@ function send_email(array $config, string $subject, string $message): bool
         mb_internal_encoding('UTF-8');
     }
     if (function_exists('mb_send_mail')) {
-        return mb_send_mail(implode(',', $to), $subject, $message, implode("\r\n", $headers));
+        return mb_send_mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
     }
 
-    return mail(implode(',', $to), $subject, $message, implode("\r\n", $headers));
+    return mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
 }
 
 $config = load_config();

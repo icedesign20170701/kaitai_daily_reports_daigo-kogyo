@@ -29,7 +29,7 @@ export async function notifyReportCreated(payload: ReportNotificationPayload) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
+      "X-Supabase-Access-Token": accessToken,
     },
     body: JSON.stringify(payload),
   });

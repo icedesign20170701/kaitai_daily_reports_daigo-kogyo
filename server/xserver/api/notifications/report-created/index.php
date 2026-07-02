@@ -42,11 +42,16 @@ function load_config(): array
     return $config;
 }
 
-function bearer_token(): string
+function access_token(): string
 {
+    $customHeader = $_SERVER['HTTP_X_SUPABASE_ACCESS_TOKEN'] ?? '';
+    if (is_string($customHeader) && trim($customHeader) !== '') {
+        return trim($customHeader);
+    }
+
     $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
     if (!is_string($header) || !preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
-        fail_json(401, 'Authorization bearer token is required');
+        fail_json(401, 'Supabase access token is required');
     }
 
     return trim($matches[1]);
@@ -174,7 +179,7 @@ function send_email(array $config, string $subject, string $message): bool
 }
 
 $config = load_config();
-verify_supabase_user($config, bearer_token());
+verify_supabase_user($config, access_token());
 
 $body = file_get_contents('php://input');
 $payload = json_decode($body === false ? '' : $body, true);

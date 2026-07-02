@@ -14,8 +14,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+function log_notification(string $message): void
+{
+    error_log('[report-created-notification] ' . $message);
+}
+
 function fail_json(int $status, string $message): void
 {
+    log_notification($status . ' ' . $message);
     http_response_code($status);
     echo json_encode(['error' => $message], JSON_UNESCAPED_UNICODE);
     exit;
@@ -77,6 +83,7 @@ function verify_supabase_user(array $config, string $accessToken): void
     ]);
 
     if ($response['status'] < 200 || $response['status'] >= 300) {
+        log_notification('Supabase user verification failed. status=' . (string)$response['status']);
         fail_json(401, 'Supabase user verification failed');
     }
 }
@@ -156,10 +163,14 @@ function send_email(array $config, string $subject, string $message): bool
         mb_internal_encoding('UTF-8');
     }
     if (function_exists('mb_send_mail')) {
-        return mb_send_mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
+        $sent = mb_send_mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
+        log_notification('mb_send_mail result=' . ($sent ? 'success' : 'failure') . ' to_count=' . (string)count($to));
+        return $sent;
     }
 
-    return mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
+    $sent = mail(implode(',', $to), $subject, $message, implode("\r\n", $headers), $additionalParams);
+    log_notification('mail result=' . ($sent ? 'success' : 'failure') . ' to_count=' . (string)count($to));
+    return $sent;
 }
 
 $config = load_config();
@@ -184,4 +195,4 @@ if (!$mailOk) {
     fail_json(502, 'notification delivery failed');
 }
 
-echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+echo json_encode(['ok' => true, 'mailToCount' => count(configured_recipients($config))], JSON_UNESCAPED_UNICODE);

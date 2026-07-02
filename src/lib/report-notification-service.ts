@@ -16,7 +16,7 @@ function normalizeEndpointUrl(url: string) {
 
 export async function notifyReportCreated(payload: ReportNotificationPayload) {
   if (!notificationUrl) {
-    return;
+    throw new Error("通知API URLが未設定です。VITE_REPORT_NOTIFICATION_URL を設定して再ビルドしてください。");
   }
 
   const { data } = await supabase.auth.getSession();

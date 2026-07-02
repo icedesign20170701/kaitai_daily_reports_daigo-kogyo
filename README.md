@@ -176,7 +176,7 @@ npm run dev
 - `VITE_FILE_UPLOAD_URL`
 - `VITE_FILE_DELETE_URL` 任意
 - `VITE_FILE_API_TOKEN` 任意
-- `VITE_REPORT_NOTIFICATION_URL` 任意
+- `VITE_REPORT_NOTIFICATION_URL` メール通知を使う場合は必須
 
 `/login` や `/reports/...` へ直接アクセスした場合も `index.html` を返すように、Webサーバー側でSPA fallbackを設定してください。
 Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
@@ -284,6 +284,7 @@ server/xserver/api/notifications/report-created/config.php
 
 通知APIは、アプリから送られるSupabaseのログインJWTを検証してから通知を送信します。
 XSERVERで送信する場合は、`mail_from` に同サーバーで作成済みのメールアドレスを設定してください。
+メールが届かない場合は、ブラウザのNetworkで通知APIのレスポンスを確認し、XSERVERのエラーログで `[report-created-notification]` を検索してください。
 
 ## 補足
 

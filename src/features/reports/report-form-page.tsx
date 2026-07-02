@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
 import { LoadingState } from "@/components/app/loading-state";
 import { ErrorState } from "@/components/app/states";
+import { buttonVariants } from "@/components/ui/button";
 import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
 import { saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
-import { withSupabaseRecovery } from "@/lib/utils";
+import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { MasterItem, Site } from "@/types/database";
 
 export function ReportFormPage() {
@@ -81,7 +82,15 @@ export function ReportFormPage() {
 
   return (
     <PageShell>
-      <PageHeader title="日報入力" description="" />
+      <PageHeader
+        title="日報入力"
+        description=""
+        action={
+          <Link to="/reports" className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}>
+            一覧へ戻る
+          </Link>
+        }
+      />
       {loading ? (
         <LoadingState message="日報入力に必要なデータを読み込んでいます..." showProgress expectedDurationMs={3000} />
       ) : error ? (

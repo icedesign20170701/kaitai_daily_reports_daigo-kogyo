@@ -130,6 +130,7 @@ cp .env.example .env
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_FILE_UPLOAD_URL=https://report.daigo-kogyo.com/api/uploads/report-photos/
+VITE_REPORT_NOTIFICATION_URL=https://report.daigo-kogyo.com/api/notifications/report-created/
 ```
 
 必要に応じて以下も設定します。
@@ -175,6 +176,7 @@ npm run dev
 - `VITE_FILE_UPLOAD_URL`
 - `VITE_FILE_DELETE_URL` 任意
 - `VITE_FILE_API_TOKEN` 任意
+- `VITE_REPORT_NOTIFICATION_URL` 任意
 
 `/login` や `/reports/...` へ直接アクセスした場合も `index.html` を返すように、Webサーバー側でSPA fallbackを設定してください。
 Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
@@ -256,6 +258,34 @@ server/xserver/api/uploads/report-photos/delete/index.php
 ```
 
 `VITE_FILE_API_TOKEN` を設定すると `Authorization: Bearer ...` を付けます。
+
+## 日報送信通知 API
+
+日報の新規送信後にLINEとメールへ通知する場合は、以下をサーバーへ配置してください。
+
+```text
+server/xserver/api/notifications/report-created/index.php
+  -> https://report.daigo-kogyo.com/api/notifications/report-created/
+```
+
+同じディレクトリに `config.php` を作成します。  
+雛形は `server/xserver/api/notifications/report-created/config.sample.php` です。
+
+```text
+server/xserver/api/notifications/report-created/config.php
+```
+
+設定する主な値:
+
+- `supabase_url`
+- `supabase_anon_key`
+- `mail_to`
+- `mail_from`
+- `line_channel_access_token`
+- `line_to`
+
+LINEはLINE Messaging APIを使います。`line_to` にはユーザーID、グループID、またはルームIDを設定してください。
+通知APIは、アプリから送られるSupabaseのログインJWTを検証してから通知を送信します。
 
 ## 補足
 

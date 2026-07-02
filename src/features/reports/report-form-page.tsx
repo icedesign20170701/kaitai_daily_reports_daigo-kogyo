@@ -11,6 +11,7 @@ import { listMasterItems } from "@/features/masters/master-service";
 import { ReportForm } from "@/features/reports/report-form";
 import { saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
+import { notifyReportCreated } from "@/lib/report-notification-service";
 import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { MasterItem, Site } from "@/types/database";
 
@@ -73,6 +74,17 @@ export function ReportFormPage() {
       toast.success("日報を保存しました");
       if (result.uploadErrors.length > 0) {
         toast.error(result.uploadErrors.join(" / "));
+      }
+      try {
+        await notifyReportCreated({
+          reportId: result.reportId,
+          reportDate: values.report_date,
+          siteName: values.site_name || sites.find((site) => site.id === values.site_id)?.name || "現場未設定",
+          reporterName: values.reporter_name || "記入者未設定",
+          workCategoryName: workCategories.find((item) => item.id === values.work_category_id)?.name || "工事分類未設定",
+        });
+      } catch (notificationError) {
+        toast.error(notificationError instanceof Error ? notificationError.message : "通知送信に失敗しました");
       }
       navigate(`/reports/${result.reportId}`);
     } finally {

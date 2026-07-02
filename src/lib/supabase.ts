@@ -64,28 +64,26 @@ async function serialAuthLock<T>(name: string, _acquireTimeout: number, fn: () =
 // background transition so the app returns with a clean Supabase client.
 
 let hiddenSince = 0;
-const RESUME_RELOAD_COOLDOWN_MS = 8000;
-const RESUME_RELOAD_COOLDOWN_KEY = "kaitai-resume-reload-at";
+let reloadingAfterResume = false;
 const HIDDEN_AT_KEY = "kaitai-hidden-at";
 export const BACKGROUND_SIGN_OUT_MS = 5 * 60 * 1000;
 export const BACKGROUND_SIGN_OUT_REQUEST_KEY = "kaitai-background-signout-requested";
 
 function reloadAfterResume(hiddenDuration: number) {
-  const lastReloadAt = Number(sessionStorage.getItem(RESUME_RELOAD_COOLDOWN_KEY) ?? 0);
-  if (Date.now() - lastReloadAt < RESUME_RELOAD_COOLDOWN_MS) {
-    return false;
-  }
-
   if (hiddenDuration >= BACKGROUND_SIGN_OUT_MS) {
     localStorage.setItem(BACKGROUND_SIGN_OUT_REQUEST_KEY, "1");
   }
 
-  sessionStorage.setItem(RESUME_RELOAD_COOLDOWN_KEY, String(Date.now()));
+  reloadingAfterResume = true;
   window.location.reload();
   return true;
 }
 
 function onAppHidden() {
+  if (reloadingAfterResume) {
+    return;
+  }
+
   hiddenSince = Date.now();
   sessionStorage.setItem(HIDDEN_AT_KEY, String(hiddenSince));
 }

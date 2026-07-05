@@ -225,6 +225,7 @@ export function ReportsPage() {
       <PageHeader
         title="日報一覧"
         description="月ごとに日報を確認し、日付単位でまとまりを見られます。"
+        contentClassName="md:max-w-[300px] lg:max-w-none"
         action={
           <>
             <Button variant="outline" onClick={() => void handleExportCsv()} disabled={reports.length === 0}>
@@ -263,8 +264,8 @@ export function ReportsPage() {
             </div>
           </div>
 
-          <div className="hidden gap-4 md:grid md:grid-cols-[auto_minmax(220px,0.8fr)_minmax(120px,auto)_minmax(120px,auto)]">
-            <div className="flex items-center md:justify-center gap-2">
+          <div className="hidden gap-4 md:grid md:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(220px,0.8fr)_minmax(120px,auto)_minmax(120px,auto)]">
+            <div className="flex items-center gap-2 md:justify-center">
               <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => subMonths(current, 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -273,13 +274,15 @@ export function ReportsPage() {
               </Button>
             </div>
             <MonthPicker value={currentMonth} onChange={setCurrentMonth} />
-            <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
-              <p className="text-xs font-semibold text-muted-foreground">件数</p>
-              <p className="mt-1 text-2xl font-extrabold">{summary.count}</p>
-            </div>
-            <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
-              <p className="text-xs font-semibold text-muted-foreground">延べ人数</p>
-              <p className="mt-1 text-2xl font-extrabold">{summary.workers}</p>
+            <div className="grid grid-cols-2 gap-4 md:col-span-2 lg:col-span-1 lg:contents">
+              <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">件数</p>
+                <p className="mt-1 text-2xl font-extrabold">{summary.count}</p>
+              </div>
+              <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-muted-foreground">延べ人数</p>
+                <p className="mt-1 text-2xl font-extrabold">{summary.workers}</p>
+              </div>
             </div>
           </div>
 
@@ -374,7 +377,7 @@ export function ReportsPage() {
                 </div>
               </div>
 
-              <Card className="md:hidden">
+              <Card className="lg:hidden">
                 <CardContent className="space-y-3 pt-5">
                   {group.items.map((report) => (
                     <Link key={report.id} to={`/reports/${report.id}`} className="block rounded-xl border bg-background p-4">
@@ -398,7 +401,7 @@ export function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="hidden md:block rounded-xl">
+              <Card className="hidden rounded-xl lg:block">
                 <CardContent className="pt-5">
                   <Table>
                     <TableHeader>

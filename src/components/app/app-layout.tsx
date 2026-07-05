@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { ClipboardList, LogOut, MapPinned, Settings2, UserCircle2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ClipboardList, LogOut, MapPinned, PanelLeftClose, PanelLeftOpen, Settings2, UserCircle2 } from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,10 +14,13 @@ const navItems = [
   { to: "/settings/profile", label: "設定", icon: UserCircle2 },
 ];
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "kaitai-sidebar-collapsed";
+
 export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSubcontractor } = useAuth();
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
   const isReportEditingScreen = location.pathname.startsWith("/reports/new") || /^\/reports\/[^/]+$/.test(location.pathname);
   const visibleNavItems = useMemo(
     () => (isSubcontractor ? navItems.filter((item) => item.to === "/reports") : navItems),
@@ -41,6 +44,10 @@ export function AppLayout() {
     }
   }, [isSubcontractor, location.pathname, navigate]);
 
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -50,13 +57,53 @@ export function AppLayout() {
     }
   };
 
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((current) => !current);
+  };
+
   return (
-    <div className="industrial-grid min-h-screen md:grid md:grid-cols-[260px_1fr]">
+    <div
+      className={cn(
+        "industrial-grid min-h-screen md:grid",
+        isSidebarCollapsed
+          ? "md:grid-cols-[64px_minmax(0,1fr)] lg:grid-cols-[88px_minmax(0,1fr)]"
+          : "md:grid-cols-[176px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)]",
+      )}
+    >
       <aside className="hidden border-r border-slate-800/70 bg-slate-950 text-slate-100 md:block">
-        <div className="sticky top-0 flex h-screen flex-col p-4">
-          <div className="mb-8 overflow-hidden rounded-3xl border border-sky-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 px-4 py-5 shadow-soft">
-            <p className="mt-2 text-2xl font-extrabold tracking-tight text-white">作業日報</p>
+        <div className={cn("sticky top-0 flex h-screen flex-col", isSidebarCollapsed ? "p-2 lg:p-4" : "p-3 lg:p-4")}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "mb-3 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white",
+              isSidebarCollapsed ? "mx-auto" : "mr-auto",
+            )}
+            title={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+            aria-label={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+            onClick={toggleSidebar}
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+
+          <div
+            className={cn(
+              "mb-8 overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 shadow-soft",
+              isSidebarCollapsed ? "px-2 py-3" : "px-3 py-4 lg:px-4 lg:py-5",
+            )}
+          >
+            <p
+              className={cn(
+                "font-extrabold tracking-tight text-white",
+                isSidebarCollapsed ? "flex justify-center" : "text-xl lg:text-2xl",
+              )}
+              title="作業日報"
+            >
+              {isSidebarCollapsed ? <ClipboardList className="h-6 w-6" aria-hidden="true" /> : "作業日報"}
+            </p>
           </div>
+
           <nav className="space-y-2">
             {visibleNavItems.map((item) => (
               <NavLink
@@ -64,24 +111,36 @@ export function AppLayout() {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-slate-400 transition hover:bg-white/8 hover:text-white",
+                    "flex items-center rounded-2xl py-3 text-sm font-semibold text-slate-400 transition hover:bg-white/8 hover:text-white",
+                    isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3",
                     isActive && "bg-gradient-to-r from-sky-500/20 to-amber-400/10 text-white ring-1 ring-sky-400/30",
                   )
                 }
+                title={item.label}
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!isSidebarCollapsed ? <span>{item.label}</span> : null}
               </NavLink>
             ))}
           </nav>
-          <Button variant="outline" className="mt-auto justify-start border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4" />
-            ログアウト
+          <Button
+            variant="outline"
+            size={isSidebarCollapsed ? "icon" : "default"}
+            className={cn(
+              "mt-auto border-white/10 bg-white/5 text-white hover:bg-white/10",
+              isSidebarCollapsed ? "mx-auto" : "justify-start",
+            )}
+            title="ログアウト"
+            aria-label="ログアウト"
+            onClick={handleSignOut}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!isSidebarCollapsed ? <span>ログアウト</span> : null}
           </Button>
         </div>
       </aside>
 
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen min-w-0 flex-col">
         {!isReportEditingScreen ? (
           <header className="border-b border-white/50 bg-background/85 backdrop-blur-xl md:sticky md:top-0 md:z-20">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
@@ -97,7 +156,7 @@ export function AppLayout() {
           </header>
         ) : null}
 
-        <main className="flex-1">
+        <main className="min-w-0 flex-1">
           <Outlet />
         </main>
 

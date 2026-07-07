@@ -10,8 +10,11 @@ React + Vite + TypeScript + Supabase で構成した、単一会社向けの日�
 - 日報の新規作成、編集、削除、詳細確認
 - 日報一覧の月送り、期間絞り込み、現場絞り込み、記入者絞り込み
 - CSV 出力
+- 写真添付、画像圧縮、写真の拡大表示
+- 日報送信後のメール通知
 - 工事分類、作業員ラベル、作業員、リース関係、ゴミ処分、車両・運搬のマスタ管理
 - マスターアカウントによるアカウント管理
+- PC / タブレット向けサイドバーの縮小表示切り替え
 
 ## 権限
 
@@ -78,7 +81,13 @@ React + Vite + TypeScript + Supabase で構成した、単一会社向けの日�
 ### 写真
 
 - 写真本体は外部ストレージへ保存します
-- Supabase には画像 URL のみ保存します
+- Supabase には画像 URL を保存します
+- フロント側で可能な場合は、長辺最大 1600px / WebP 品質 0.8 に圧縮してからアップロードします
+- 変換後の画像が元画像より大きい場合は、元画像のままアップロードします
+- 対応アップロード形式は `avif` / `gif` / `jpeg` / `png` / `webp` です
+- PHPアップロードAPI側の上限は 10MB です
+- 日報詳細画面で写真をクリックするとモーダルで拡大表示できます
+- 複数枚ある場合は、モーダル内の前へ / 次へ操作で切り替えできます
 - ブラウザ仕様上、未アップロードのファイル選択状態は自動リロード後に復元できません
 
 ### 自動リロード時の復元
@@ -116,11 +125,7 @@ React + Vite + TypeScript + Supabase で構成した、単一会社向けの日�
 npm install
 ```
 
-2. 環境変数を作成
-
-```bash
-cp .env.example .env
-```
+2. `.env` を作成
 
 3. `.env` に値を設定
 
@@ -142,7 +147,7 @@ VITE_FILE_API_TOKEN=your-api-token
 
 4. Supabase SQL を実行
 
-Supabase の SQL Editor で最新の [src/supabase.sql](/Users/yuma/Documents/develop/kaitai_daily_reports_daigo-kogyo/src/supabase.sql) を実行してください。  
+Supabase の SQL Editor で最新の `src/supabase.sql` を実行してください。  
 既存環境に追加機能を反映する場合も、最新 SQL の再実行が必要です。
 
 最近の重要な変更:
@@ -180,6 +185,13 @@ npm run dev
 
 `/login` や `/reports/...` へ直接アクセスした場合も `index.html` を返すように、Webサーバー側でSPA fallbackを設定してください。
 Supabase Auth 側で Site URL や許可リダイレクトURLを設定する場合は `https://report.daigo-kogyo.com` を登録してください。
+
+検索エンジン対策として、以下を設定済みです。
+
+- `index.html` に `noindex, nofollow`
+- `public/robots.txt` で全クロールを拒否
+
+通常運用の本番公開後は Basic 認証を外し、Supabase ログインで利用者を制御する想定です。
 
 ## 画面一覧
 
@@ -258,6 +270,7 @@ server/xserver/api/uploads/report-photos/delete/index.php
 ```
 
 `VITE_FILE_API_TOKEN` を設定すると `Authorization: Bearer ...` を付けます。
+このトークンは画像アップロード / 削除API用です。
 
 ## 日報送信通知 API
 
@@ -284,15 +297,32 @@ server/xserver/api/notifications/report-created/config.php
 - `mail_from`: 送信元として使う実在のメールアドレス
 
 通知APIは、アプリから送られるSupabaseのログインJWTを検証してから通知を送信します。
+フロントから通知APIへは、Basic認証との衝突を避けるため `Authorization` ではなく `X-Supabase-Access-Token` ヘッダーでログインJWTを送ります。
 XSERVERで送信する場合は、`mail_from` に同サーバーで作成済みのメールアドレスを設定してください。
 メールが届かない場合は、ブラウザのNetworkで通知APIのレスポンスを確認し、XSERVERのエラーログで `[report-created-notification]` を検索してください。
+通知メールには、作業日、現場、工事分類、記入者、日報URL、日報IDが記載されます。
+
+## 操作マニュアル
+
+操作マニュアル v1.0.1 は以下に出力しています。
+
+```text
+output/pdf/daigo_daily_report_app_manual_v101.pdf
+```
+
+生成スクリプトは以下です。
+
+```bash
+/Users/yuma/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 scripts/create_manual_pdf.py
+```
 
 ## 補足
 
 - 画像 URL は `report_photos.image_path` に保存しています
 - RLS は MVP として「ログイン済みユーザーのみ CRUD 可」を基本にしています
 - 将来マルチテナント化する場合は、各テーブルに `company_id` を追加して RLS を組み直す前提です
-- スマホ復帰時の安定性を優先して route lazy loading は使っていません
+- スマホ / タブレット復帰時の安定性を優先して route lazy loading は使っていません
+- 5分以上バックグラウンドに入った場合はログアウト対象です
 
 ## 動作確認
 
@@ -307,4 +337,3 @@ npm run build
 
 - `company_id` 追加によるマルチテナント化
 - PWA 化
-- 画像圧縮

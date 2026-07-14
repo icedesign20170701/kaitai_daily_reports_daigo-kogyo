@@ -124,6 +124,20 @@ function require_string(array $payload, string $key): string
     return trim($value);
 }
 
+function optional_string(array $payload, string $key): string
+{
+    $value = $payload[$key] ?? '';
+    if ($value === null) {
+        return '';
+    }
+
+    if (!is_string($value)) {
+        fail_json(400, $key . ' is invalid');
+    }
+
+    return trim($value);
+}
+
 function report_url(array $config, string $reportId): string
 {
     $appUrl = rtrim((string)($config['app_url'] ?? 'https://report.daigo-kogyo.com'), '/');
@@ -193,11 +207,47 @@ function validated_email_list(array $addresses, string $configKey): array
     return $recipients;
 }
 
+function validated_id_list(array $ids, string $configKey): array
+{
+    $normalizedIds = [];
+    foreach ($ids as $id) {
+        if (!is_string($id)) {
+            fail_json(500, $configKey . ' is invalid');
+        }
+
+        $id = trim($id);
+        if ($id === '') {
+            continue;
+        }
+
+        $normalizedIds[] = $id;
+    }
+
+    return $normalizedIds;
+}
+
 function notification_recipients(array $config, array $payload): array
 {
     $recipients = configured_recipients($config);
+    $civilWorkCategoryIds = $config['civil_work_category_ids'] ?? [];
+    if (!is_array($civilWorkCategoryIds)) {
+        fail_json(500, 'civil_work_category_ids is invalid');
+    }
+
+    $workCategoryId = optional_string($payload, 'workCategoryId');
     $workCategoryName = require_string($payload, 'workCategoryName');
-    if ($workCategoryName === '土木工事') {
+    $civilWorkIds = validated_id_list($civilWorkCategoryIds, 'civil_work_category_ids');
+    $isCivilWork = count($civilWorkIds) > 0
+        ? in_array($workCategoryId, $civilWorkIds, true)
+        : $workCategoryName === '土木工事';
+
+    log_notification(
+        'workCategoryId=' . ($workCategoryId === '' ? '(empty)' : $workCategoryId)
+        . ' workCategoryName=' . $workCategoryName
+        . ' isCivilWork=' . ($isCivilWork ? 'true' : 'false')
+    );
+
+    if ($isCivilWork) {
         $civilWorkTo = $config['civil_work_mail_to'] ?? [];
         if (!is_array($civilWorkTo)) {
             fail_json(500, 'civil_work_mail_to is invalid');
@@ -225,6 +275,8 @@ function send_email(array $config, array $payload, string $subject, string $mess
     $headers = [
         'From: ' . $from,
         'Reply-To: ' . $from,
+        'MIME-Version: 1.0',
+        'Content-Language: ja',
         'Content-Type: text/plain; charset=ISO-2022-JP',
         'Content-Transfer-Encoding: 7bit',
     ];

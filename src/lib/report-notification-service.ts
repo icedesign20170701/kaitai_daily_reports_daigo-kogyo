@@ -7,6 +7,7 @@ type ReportNotificationPayload = {
   reportDate: string;
   siteName: string;
   reporterName: string;
+  workCategoryId: string;
   workCategoryName: string;
 };
 

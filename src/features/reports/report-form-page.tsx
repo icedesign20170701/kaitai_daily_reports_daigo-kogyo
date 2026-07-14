@@ -81,6 +81,7 @@ export function ReportFormPage() {
           reportDate: values.report_date,
           siteName: values.site_name || sites.find((site) => site.id === values.site_id)?.name || "現場未設定",
           reporterName: values.reporter_name || "記入者未設定",
+          workCategoryId: values.work_category_id,
           workCategoryName: workCategories.find((item) => item.id === values.work_category_id)?.name || "工事分類未設定",
         });
       } catch (notificationError) {

@@ -67,6 +67,9 @@ export async function listReports(filters: ReportListFilters = {}) {
   if (filters.siteId) {
     query = query.eq("site_id", filters.siteId);
   }
+  if (filters.workCategoryId) {
+    query = query.eq("work_category_id", filters.workCategoryId);
+  }
   if (filters.createdBy) {
     query = query.eq("created_by", filters.createdBy);
   }

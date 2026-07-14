@@ -3,6 +3,27 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
+function apply_cors_headers(): void
+{
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    $allowedOrigins = [
+        'https://report.daigo-kogyo.com',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ];
+
+    if (is_string($origin) && in_array($origin, $allowedOrigins, true)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Vary: Origin');
+    }
+
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type, X-Supabase-Access-Token, Authorization');
+    header('Access-Control-Max-Age: 86400');
+}
+
+apply_cors_headers();
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
@@ -153,6 +174,40 @@ function configured_recipients(array $config): array
     return $recipients;
 }
 
+function validated_email_list(array $addresses, string $configKey): array
+{
+    $recipients = [];
+    foreach ($addresses as $address) {
+        if (!is_string($address)) {
+            fail_json(500, $configKey . ' is invalid');
+        }
+
+        $address = trim($address);
+        if (!filter_var($address, FILTER_VALIDATE_EMAIL)) {
+            fail_json(500, $configKey . ' is invalid');
+        }
+
+        $recipients[] = $address;
+    }
+
+    return $recipients;
+}
+
+function notification_recipients(array $config, array $payload): array
+{
+    $recipients = configured_recipients($config);
+    $workCategoryName = require_string($payload, 'workCategoryName');
+    if ($workCategoryName === '土木工事') {
+        $civilWorkTo = $config['civil_work_mail_to'] ?? [];
+        if (!is_array($civilWorkTo)) {
+            fail_json(500, 'civil_work_mail_to is invalid');
+        }
+        $recipients = array_merge($recipients, validated_email_list($civilWorkTo, 'civil_work_mail_to'));
+    }
+
+    return array_values(array_unique($recipients));
+}
+
 function configured_sender(array $config): string
 {
     $from = trim((string)($config['mail_from'] ?? ''));
@@ -163,9 +218,9 @@ function configured_sender(array $config): string
     return $from;
 }
 
-function send_email(array $config, string $subject, string $message): bool
+function send_email(array $config, array $payload, string $subject, string $message): bool
 {
-    $to = configured_recipients($config);
+    $to = notification_recipients($config, $payload);
     $from = configured_sender($config);
     $headers = [
         'From: ' . $from,
@@ -213,10 +268,10 @@ if (!preg_match('/^[0-9a-fA-F-]{36}$/', $reportId)) {
 
 $message = build_message($config, $payload);
 $subject = '日報が送信されました';
-$mailOk = send_email($config, $subject, $message);
+$mailOk = send_email($config, $payload, $subject, $message);
 
 if (!$mailOk) {
     fail_json(502, 'notification delivery failed');
 }
 
-echo json_encode(['ok' => true, 'mailToCount' => count(configured_recipients($config))], JSON_UNESCAPED_UNICODE);
+echo json_encode(['ok' => true, 'mailToCount' => count(notification_recipients($config, $payload))], JSON_UNESCAPED_UNICODE);

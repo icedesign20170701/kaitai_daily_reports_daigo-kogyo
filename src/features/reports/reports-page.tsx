@@ -17,12 +17,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { exportReportsCsv } from "@/features/reports/report-export";
 import { useAuth } from "@/features/auth/auth-context";
 import { listAppUsers } from "@/features/auth/auth-service";
+import { listMasterItems } from "@/features/masters/master-service";
 import { displayReportSiteName, listReports } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { cn, formatDate, toDateInputValue, withSupabaseRecovery } from "@/lib/utils";
 import type { AppUser, DailyReport, MasterItem, Site } from "@/types/database";
 
 type ReportListRow = DailyReport & { site: Site | null; work_category?: MasterItem | null; creator_display_name?: string | null };
+const HIDDEN_REPORT_AUTHOR_IDS = new Set(["be79d784-de9b-433e-a74c-0648102e3dda"]);
 
 function DateFilterField({
   id,
@@ -130,6 +132,7 @@ export function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
+  const [workCategories, setWorkCategories] = useState<MasterItem[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [showFilters, setShowFilters] = useState(false);
@@ -137,6 +140,7 @@ export function ReportsPage() {
     from: toDateInputValue(startOfMonth(new Date())),
     to: toDateInputValue(endOfMonth(new Date())),
     siteId: "all",
+    workCategoryId: "all",
     createdBy: "all",
   });
 
@@ -149,6 +153,7 @@ export function ReportsPage() {
           from: filters.from || undefined,
           to: filters.to || undefined,
           siteId: filters.siteId === "all" ? undefined : filters.siteId,
+          workCategoryId: filters.workCategoryId === "all" ? undefined : filters.workCategoryId,
           createdBy: filters.createdBy === "all" ? undefined : filters.createdBy,
         }),
         8000,
@@ -164,6 +169,7 @@ export function ReportsPage() {
 
   const loadFilterOptions = useCallback(() => {
     void withSupabaseRecovery(() => listSites(true), 6000).then(setSites).catch(() => undefined);
+    void withSupabaseRecovery(() => listMasterItems("workCategory", false), 6000).then(setWorkCategories).catch(() => undefined);
     void withSupabaseRecovery(() => listAppUsers(), 6000).then(setAppUsers).catch(() => undefined);
   }, []);
 
@@ -204,10 +210,16 @@ export function ReportsPage() {
       items,
     }));
   }, [reports]);
+  const filterableAppUsers = useMemo(
+    () => appUsers.filter((item) => !HIDDEN_REPORT_AUTHOR_IDS.has(item.user_id)),
+    [appUsers],
+  );
 
   const filterSummary = `${formatDate(filters.from)}〜${formatDate(filters.to)} / ${
     filters.siteId === "all" ? "すべての現場" : sites.find((site) => site.id === filters.siteId)?.name ?? "現場未選択"
-  } / ${filters.createdBy === "all" ? "全員" : appUsers.find((item) => item.user_id === filters.createdBy)?.display_name ?? "未設定"}`;
+  } / ${filters.workCategoryId === "all" ? "すべての工事区分" : workCategories.find((item) => item.id === filters.workCategoryId)?.name ?? "工事区分未選択"} / ${
+    filters.createdBy === "all" ? "全員" : filterableAppUsers.find((item) => item.user_id === filters.createdBy)?.display_name ?? "未設定"
+  }`;
   const greetingName = appUser?.display_name || user?.email || "ユーザー";
 
   const handleExportCsv = async () => {
@@ -305,7 +317,7 @@ export function ReportsPage() {
             )}
           >
             <div className="min-h-0">
-            <div className="grid gap-4 rounded-2xl border bg-background p-4 md:grid-cols-[1fr_1fr_1.1fr_1.1fr]">
+            <div className="grid gap-4 rounded-2xl border bg-background p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.1fr_1.1fr_1.1fr]">
               <DateFilterField
                 id="filter-from"
                 label="開始日"
@@ -337,6 +349,24 @@ export function ReportsPage() {
                 </div>
               </div>
               <div className="min-w-0 space-y-2">
+                <Label>工事区分</Label>
+                <div className="relative">
+                  <select
+                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+                    value={filters.workCategoryId}
+                    onChange={(event) => setFilters((current) => ({ ...current, workCategoryId: event.target.value }))}
+                  >
+                    <option value="all">すべての工事区分</option>
+                    {workCategories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+                </div>
+              </div>
+              <div className="min-w-0 space-y-2">
                 <Label>記入者</Label>
                 <div className="relative">
                   <select
@@ -345,7 +375,7 @@ export function ReportsPage() {
                     onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
                   >
                     <option value="all">全員</option>
-                    {appUsers.map((item) => (
+                    {filterableAppUsers.map((item) => (
                       <option key={item.user_id} value={item.user_id}>
                         {item.display_name || "未設定"}
                       </option>

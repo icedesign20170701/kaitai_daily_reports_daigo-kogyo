@@ -61,6 +61,7 @@ function buildWorkerCostRows(workers: ReportWorker[], externalEntries: ReportExt
 
   workers.forEach((worker) => {
     const label = worker.label_snapshot?.trim() || worker.group_label?.trim() || "ラベル未設定";
+    if (!label.includes("大吾興業")) return;
     const current = grouped.get(label) ?? { count: 0, unitPrice: worker.unit_price_snapshot ?? labelPriceMap.get(label) ?? 0 };
     current.count += 1;
     grouped.set(label, current);

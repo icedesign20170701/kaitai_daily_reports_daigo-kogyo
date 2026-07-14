@@ -9,5 +9,8 @@ return [
     'mail_to' => [
         'recipient@example.com',
     ],
+    'civil_work_mail_to' => [
+        'civil-work-recipient@example.com',
+    ],
     'mail_from' => 'sender@example.com',
 ];

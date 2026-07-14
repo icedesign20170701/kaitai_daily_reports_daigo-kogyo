@@ -148,5 +148,6 @@ export type ReportListFilters = {
   from?: string;
   to?: string;
   siteId?: string;
+  workCategoryId?: string;
   createdBy?: string;
 };

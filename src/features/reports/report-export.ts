@@ -44,6 +44,7 @@ function workerCostSummary(report: Awaited<ReturnType<typeof getReportDetail>>) 
 
   report.workers.forEach((worker) => {
     const label = worker.label_snapshot || worker.group_label || "未分類";
+    if (!label.includes("大吾興業")) return;
     const unitPrice = worker.unit_price_snapshot ?? 0;
     const current = grouped.get(label) ?? { count: 0, unitPrice };
     current.count += 1;

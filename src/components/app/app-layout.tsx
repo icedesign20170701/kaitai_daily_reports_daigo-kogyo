@@ -46,6 +46,7 @@ export function AppLayout() {
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed));
+    window.dispatchEvent(new Event("kaitai-sidebar-collapsed-change"));
   }, [isSidebarCollapsed]);
 
   const handleSignOut = async () => {
@@ -62,46 +63,47 @@ export function AppLayout() {
   };
 
   return (
-    <div
-      className={cn(
-        "industrial-grid min-h-screen md:grid",
-        isSidebarCollapsed
-          ? "md:grid-cols-[64px_minmax(0,1fr)] lg:grid-cols-[88px_minmax(0,1fr)]"
-          : "md:grid-cols-[176px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)]",
-      )}
-    >
-      <aside className="hidden border-r border-slate-800/70 bg-slate-950 text-slate-100 md:block">
-        <div className={cn("sticky top-0 flex h-screen flex-col", isSidebarCollapsed ? "p-2 lg:p-4" : "p-3 lg:p-4")}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "mb-3 border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white",
-              isSidebarCollapsed ? "mx-auto" : "mr-auto",
-            )}
-            title={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
-            aria-label={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
-            onClick={toggleSidebar}
-          >
-            {isSidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </Button>
-
+    <div className="industrial-grid min-h-screen">
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden border-r border-slate-800/70 bg-slate-950 text-slate-100 md:block",
+          isSidebarCollapsed ? "md:w-[64px] lg:w-[88px]" : "md:w-[176px] lg:w-[260px]",
+        )}
+      >
+        <div className={cn("flex h-screen flex-col", isSidebarCollapsed ? "p-2 lg:p-4" : "p-3 lg:p-4")}>
           <div
             className={cn(
               "mb-8 overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 shadow-soft",
-              isSidebarCollapsed ? "px-2 py-3" : "px-3 py-4 lg:px-4 lg:py-5",
+              isSidebarCollapsed ? "px-2 py-3" : "px-3 py-3 lg:px-4 lg:py-4",
             )}
           >
-            <p
+            <div
               className={cn(
-                "font-extrabold tracking-tight text-white",
-                isSidebarCollapsed ? "flex justify-center" : "text-xl lg:text-2xl",
+                "flex items-center",
+                isSidebarCollapsed ? "justify-center" : "justify-between gap-2",
               )}
-              title="作業日報"
             >
-              {isSidebarCollapsed ? <ClipboardList className="h-6 w-6" aria-hidden="true" /> : "作業日報"}
-            </p>
+              <p
+                className={cn(
+                  "font-extrabold tracking-tight text-white",
+                  isSidebarCollapsed ? "sr-only" : "min-w-0 truncate text-lg lg:text-2xl",
+                )}
+                title="作業日報"
+              >
+                作業日報
+              </p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0 text-slate-100 hover:bg-white/10 hover:text-white"
+                title={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+                aria-label={isSidebarCollapsed ? "サイドバーを展開" : "サイドバーを縮小"}
+                onClick={toggleSidebar}
+              >
+                {isSidebarCollapsed ? <PanelLeftOpen className="h-6 w-6" /> : <PanelLeftClose className="h-5 w-5" />}
+              </Button>
+            </div>
           </div>
 
           <nav className="space-y-2">
@@ -140,7 +142,12 @@ export function AppLayout() {
         </div>
       </aside>
 
-      <div className="flex min-h-screen min-w-0 flex-col">
+      <div
+        className={cn(
+          "flex min-h-screen min-w-0 flex-col",
+          isSidebarCollapsed ? "md:ml-[64px] lg:ml-[88px]" : "md:ml-[176px] lg:ml-[260px]",
+        )}
+      >
         {!isReportEditingScreen ? (
           <header className="border-b border-white/50 bg-background/85 backdrop-blur-xl md:sticky md:top-0 md:z-20">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">

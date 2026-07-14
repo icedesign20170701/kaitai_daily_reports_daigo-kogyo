@@ -36,6 +36,7 @@ import type {
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
 const subcontractorCountOptions = Array.from({ length: 21 }, (_, index) => index);
 const MANUAL_SITE_OPTION = "__manual__";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "kaitai-sidebar-collapsed";
 const disposalTypeOptions = [
   { value: "wood", label: "木類" },
   { value: "board", label: "ボード" },
@@ -106,15 +107,6 @@ const reportSchema = z
           message: "現場名を入力してください",
         });
       }
-    }
-
-    const totalWorkerCount = values.worker_ids.length + values.external_worker_entries.reduce((sum, entry) => sum + entry.count, 0);
-    if (totalWorkerCount <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["worker_ids"],
-        message: "作業員を1人以上選択してください",
-      });
     }
 
     values.lease_entries.forEach((entry, index) => {
@@ -337,31 +329,54 @@ function WorkerGroup({
     const selectedCount = externalCount ?? 0;
 
     return (
-      <div className="grid grid-cols-[minmax(0,1.5fr)_auto] items-center gap-3 rounded-xl border bg-background px-3 py-3">
-        <p className="min-w-0 text-sm font-semibold">{title}</p>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <select
-              className="flex h-11 w-[84px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:w-[96px] md:text-sm"
-              value={String(selectedCount)}
-              onChange={(event) => onChangeCount(Number(event.target.value))}
-            >
-              {subcontractorCountOptions.map((option) => (
-                <option key={option} value={String(option)}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+      <div className="space-y-3 rounded-xl border bg-background px-3 py-3">
+        <div className="grid grid-cols-[minmax(0,1.5fr)_auto] items-center gap-3">
+          <p className="min-w-0 text-sm font-semibold">{title}</p>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <select
+                className="flex h-11 w-[84px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:w-[96px] md:text-sm"
+                value={String(selectedCount)}
+                onChange={(event) => onChangeCount(Number(event.target.value))}
+              >
+                {subcontractorCountOptions.map((option) => (
+                  <option key={option} value={String(option)}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+            </div>
+            <span className="text-sm">人</span>
           </div>
-          <span className="text-sm">人</span>
         </div>
+        {selectedCount > 0 ? (
+          <div className="border-t pt-3">
+            <div className="flex flex-wrap gap-2">
+              {items.map((item) => {
+                const checked = values.includes(item.id);
+                return (
+                  <label
+                    key={item.id}
+                    className={cn(
+                      "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full border px-2 py-1 text-sm font-medium transition",
+                      checked ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-accent/50",
+                    )}
+                  >
+                    <Checkbox checked={checked} onCheckedChange={(next) => onToggle(item.id, next === true)} />
+                    <span className="text-[0.7rem] md:text-sm">{item.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <p className="text-sm font-semibold">{title}</p>
       <div className="flex flex-wrap gap-2">
         {items.map((item) => {
@@ -370,12 +385,12 @@ function WorkerGroup({
             <label
               key={item.id}
               className={cn(
-                "inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition",
+                "inline-flex min-h-11 cursor-pointer items-center gap-1 rounded-full border px-2 py-1 text-sm font-medium transition",
                 checked ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-accent/50",
               )}
             >
               <Checkbox checked={checked} onCheckedChange={(next) => onToggle(item.id, next === true)} />
-              <span>{item.name}</span>
+              <span className="text-[0.7rem] md:text-sm">{item.name}</span>
             </label>
           );
         })}
@@ -436,6 +451,34 @@ function buildWorkerCostSummaryRows(workers: ReportWorker[], workerIds: string[]
     unitPrice: value.unitPrice,
     subtotal: value.count * value.unitPrice,
   }));
+}
+
+function useSidebarCollapsedState() {
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() =>
+    typeof window !== "undefined" ? window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true" : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const syncSidebarState = () => {
+      setIsSidebarCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
+    };
+
+    window.addEventListener("storage", syncSidebarState);
+    window.addEventListener("focus", syncSidebarState);
+    window.addEventListener("kaitai-sidebar-collapsed-change", syncSidebarState);
+    document.addEventListener("visibilitychange", syncSidebarState);
+
+    return () => {
+      window.removeEventListener("storage", syncSidebarState);
+      window.removeEventListener("focus", syncSidebarState);
+      window.removeEventListener("kaitai-sidebar-collapsed-change", syncSidebarState);
+      document.removeEventListener("visibilitychange", syncSidebarState);
+    };
+  }, []);
+
+  return isSidebarCollapsed;
 }
 
 function mergeWorkerCostRows(
@@ -742,6 +785,7 @@ export function ReportForm({
   onDeleteExistingPhoto?: (photo: ReportPhoto) => Promise<void>;
 }) {
   const { isMaster } = useAuth();
+  const isSidebarCollapsed = useSidebarCollapsedState();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const draftKey = initialReport ? `report-form-draft:${initialReport.id}` : "report-form-draft:new";
   const scrollKey = `${draftKey}:scroll`;
@@ -928,13 +972,33 @@ export function ReportForm({
   const otherVehicleArray = useFieldArray({ control: form.control, name: "other_vehicle_entries" });
 
   const externalWorkerEntries = form.watch("external_worker_entries");
-  const selectedWorkerCount =
-    form.watch("worker_ids").length + externalWorkerEntries.reduce((sum, entry) => sum + entry.count, 0);
   const workerIds = form.watch("worker_ids");
   const leaseEntries = form.watch("lease_entries");
   const disposalEntries = form.watch("disposal_entries");
   const transportEntries = form.watch("transport_entries");
   const otherVehicleEntries = form.watch("other_vehicle_entries");
+
+  const daigoWorkerIds = useMemo(
+    () => new Set(workers.filter((worker) => worker.group_label?.trim().includes("大吾興業")).map((worker) => worker.id)),
+    [workers],
+  );
+  const selectedWorkerCount =
+    workerIds.filter((workerId) => daigoWorkerIds.has(workerId)).length + externalWorkerEntries.reduce((sum, entry) => sum + entry.count, 0);
+  const reportDate = form.watch("report_date");
+  const reporterNameValue = form.watch("reporter_name");
+  const siteId = form.watch("site_id");
+  const siteName = form.watch("site_name");
+  const workCategoryId = form.watch("work_category_id");
+  const otherWorkersNote = form.watch("other_workers_note");
+  const hasRequiredWorkerInput = selectedWorkerCount > 0 || otherWorkersNote.trim().length > 0;
+  const hasRequiredSiteInput = Boolean(siteId) && (siteId !== MANUAL_SITE_OPTION || siteName.trim().length > 0);
+  const canSubmitRequiredFields =
+    reportDate.trim().length > 0 &&
+    reporterNameValue.trim().length > 0 &&
+    hasRequiredSiteInput &&
+    workCategoryId.trim().length > 0 &&
+    hasRequiredWorkerInput;
+  const isSaveDisabled = submitting || !canSubmitRequiredFields;
 
   const workerGroups = useMemo(() => {
     return workerLabels
@@ -953,11 +1017,11 @@ export function ReportForm({
     () =>
       isMaster
         ? mergeWorkerCostRows(
-            buildWorkerCostSummaryRows(workers as ReportWorker[], workerIds, workerLabels),
+            buildWorkerCostSummaryRows(workers as ReportWorker[], workerIds.filter((workerId) => daigoWorkerIds.has(workerId)), workerLabels),
             externalWorkerEntries as ReportExternalWorkerEntry[],
           )
         : [],
-    [externalWorkerEntries, isMaster, workerIds, workerLabels, workers],
+    [daigoWorkerIds, externalWorkerEntries, isMaster, workerIds, workerLabels, workers],
   );
 
   const [previewPhotos, setPreviewPhotos] = useState<Array<{ id: string; index: number; name: string; url: string }>>([]);
@@ -1074,6 +1138,14 @@ export function ReportForm({
     async (values) => {
       try {
         const externalCount = values.external_worker_entries.reduce((sum, entry) => sum + entry.count, 0);
+        const countedWorkerCount = values.worker_ids.filter((workerId) => daigoWorkerIds.has(workerId)).length + externalCount;
+        const hasOtherWorkersNote = values.other_workers_note.trim().length > 0;
+        if (countedWorkerCount <= 0 && !hasOtherWorkersNote) {
+          form.setError("worker_ids", { type: "manual", message: "作業員を1人以上選択するか、上記以外の従業員を入力してください" });
+          scrollToError("worker_ids");
+          toast.error("作業員を1人以上選択するか、上記以外の従業員を入力してください");
+          return;
+        }
         if (isSubcontractor && !values.reporter_name.trim()) {
           form.setError("reporter_name", { type: "manual", message: "記入者名を入力してください" });
           scrollToError("reporter_name");
@@ -1085,7 +1157,7 @@ export function ReportForm({
             ...values,
             reporter_name: isSubcontractor ? values.reporter_name.trim() : reporterName?.trim() || values.reporter_name.trim(),
             site_name: values.site_id === MANUAL_SITE_OPTION ? values.site_name.trim() : "",
-            worker_count: values.worker_ids.length + externalCount,
+            worker_count: countedWorkerCount > 0 ? countedWorkerCount : 1,
           },
           pendingFiles,
         );
@@ -1108,7 +1180,7 @@ export function ReportForm({
   );
 
   return (
-    <form className="space-y-4" onSubmit={submit}>
+    <form className="space-y-4 pb-36" onSubmit={submit}>
       <Card>
         <CardHeader>
           <CardTitle>{initialReport ? "大吾興業工事作業日報の編集" : "大吾興業工事作業日報"}</CardTitle>
@@ -1305,7 +1377,7 @@ export function ReportForm({
             </FieldBlock>
           ) : null}
 
-          <FieldBlock title="作業員・その他備考" required>
+          <FieldBlock title="従業員・その他備考" required>
             <div data-field-path="worker_ids" className="rounded-xl bg-secondary/60 px-3 py-2 text-sm font-medium">作業人数: {selectedWorkerCount}人</div>
             {form.formState.errors.worker_ids ? <p className="text-sm text-destructive">{form.formState.errors.worker_ids.message}</p> : null}
             {workerGroups.map((group) => (
@@ -1326,7 +1398,13 @@ export function ReportForm({
             {isMaster ? <WorkerCostSummary rows={workerCostSummary} /> : null}
             <div className="space-y-2">
               <Label htmlFor="other_workers_note">上記以外の従業員</Label>
-              <Textarea id="other_workers_note" rows={4} placeholder="マスタに未登録の従業員がいれば入力" {...form.register("other_workers_note")} />
+              <Textarea
+                id="other_workers_note"
+                rows={4}
+                placeholder="マスタに未登録の従業員がいれば入力"
+                className="text-[0.7rem] md:text-sm"
+                {...form.register("other_workers_note")}
+              />
             </div>
           </FieldBlock>
 
@@ -1391,20 +1469,34 @@ export function ReportForm({
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? (
-            <>
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              保存中...
-            </>
-          ) : (
-            "保存する"
-          )}
-        </Button>
-        <Link to="/reports" className={cn(buttonVariants({ variant: "outline" }), "w-full md:hidden")}>
+      <div className="pt-2">
+        <Link to="/reports" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
           一覧に戻る
         </Link>
+      </div>
+
+      <div
+        className={cn(
+          "fixed bottom-0 right-0 z-40 border-t bg-background/95 px-4 py-3 shadow-[0_-12px_30px_rgba(15,23,42,0.08)] backdrop-blur md:px-6",
+          isSidebarCollapsed ? "left-0 md:left-[64px] lg:left-[88px]" : "left-0 md:left-[176px] lg:left-[260px]",
+        )}
+      >
+        <div className="mx-auto w-full max-w-6xl space-y-3">
+          <Button
+            type="submit"
+            className="w-full disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none"
+            disabled={isSaveDisabled}
+          >
+            {submitting ? (
+              <>
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              "保存する"
+            )}
+          </Button>
+        </div>
       </div>
     </form>
   );

@@ -21,6 +21,7 @@ export type MasterItem = BaseRow & {
   unit_price?: number | null;
   sort_order: number;
   is_active: boolean;
+  is_deleted?: boolean;
 };
 
 export type DailyReport = BaseRow & {

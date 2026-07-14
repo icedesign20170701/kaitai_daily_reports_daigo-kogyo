@@ -53,9 +53,13 @@ create table if not exists public.work_categories (
   name text not null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.work_categories
+  add column if not exists is_deleted boolean not null default false;
 
 alter table public.daily_reports
   add column if not exists work_category_id uuid references public.work_categories(id);
@@ -75,9 +79,13 @@ create table if not exists public.workers (
   group_label text,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.workers
+  add column if not exists is_deleted boolean not null default false;
 
 create table if not exists public.worker_labels (
   id uuid primary key default gen_random_uuid(),
@@ -85,36 +93,52 @@ create table if not exists public.worker_labels (
   unit_price integer not null default 0,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.worker_labels
+  add column if not exists is_deleted boolean not null default false;
 
 create table if not exists public.lease_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.lease_items
+  add column if not exists is_deleted boolean not null default false;
 
 create table if not exists public.disposal_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.disposal_items
+  add column if not exists is_deleted boolean not null default false;
 
 create table if not exists public.transport_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   sort_order integer not null default 0,
   is_active boolean not null default true,
+  is_deleted boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.transport_items
+  add column if not exists is_deleted boolean not null default false;
 
 create table if not exists public.daily_report_workers (
   id uuid primary key default gen_random_uuid(),

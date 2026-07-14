@@ -31,6 +31,7 @@ export async function listMasterItems(type: MasterItemType, includeInactive = tr
   let query = supabase
     .from(tableMap[type])
     .select("*")
+    .eq("is_deleted", false)
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -59,6 +60,7 @@ export async function upsertMasterItem(
           group_label: payload.group_label ?? null,
           sort_order: payload.sort_order,
           is_active: payload.is_active,
+          is_deleted: payload.is_deleted ?? false,
         }
       : type === "workerLabel"
         ? {
@@ -67,12 +69,14 @@ export async function upsertMasterItem(
             unit_price: payload.unit_price ?? 0,
             sort_order: payload.sort_order,
             is_active: payload.is_active,
+            is_deleted: payload.is_deleted ?? false,
           }
       : {
           id: payload.id,
           name: payload.name,
           sort_order: payload.sort_order,
           is_active: payload.is_active,
+          is_deleted: payload.is_deleted ?? false,
         };
 
   const query = payload.id
@@ -98,6 +102,7 @@ export async function reorderMasterItems(type: MasterItemType, items: MasterItem
           group_label: item.group_label ?? null,
           sort_order: index,
           is_active: item.is_active,
+          is_deleted: item.is_deleted ?? false,
         }
       : type === "workerLabel"
         ? {
@@ -106,12 +111,14 @@ export async function reorderMasterItems(type: MasterItemType, items: MasterItem
             unit_price: item.unit_price ?? 0,
             sort_order: index,
             is_active: item.is_active,
+            is_deleted: item.is_deleted ?? false,
           }
       : {
           id: item.id,
           name: item.name,
           sort_order: index,
           is_active: item.is_active,
+          is_deleted: item.is_deleted ?? false,
         },
   );
 
@@ -124,33 +131,29 @@ export async function reorderMasterItems(type: MasterItemType, items: MasterItem
 }
 
 export async function archiveMasterItem(type: MasterItemType, item: MasterItem) {
-  const payload =
-    type === "worker"
-      ? {
-          id: item.id,
-          name: item.name,
-          group_label: item.group_label ?? null,
-          sort_order: item.sort_order,
-          is_active: false,
-        }
-      : type === "workerLabel"
-        ? {
-            id: item.id,
-            name: item.name,
-            unit_price: item.unit_price ?? 0,
-            sort_order: item.sort_order,
-            is_active: false,
-          }
-      : {
-          id: item.id,
-          name: item.name,
-          sort_order: item.sort_order,
-          is_active: false,
-        };
-
-  const { error } = await supabase.from(tableMap[type]).update(payload).eq("id", item.id);
+  const { data, error } = await supabase.from(tableMap[type]).update({ is_active: false }).eq("id", item.id).select("id, is_active").single();
   if (error) {
     throw error;
+  }
+  if (!data || data.is_active !== false) {
+    throw new Error("項目を無効化できませんでした");
+  }
+
+  invalidateMasterCache(type);
+}
+
+export async function deleteMasterItem(type: MasterItemType, item: MasterItem) {
+  const { data, error } = await supabase
+    .from(tableMap[type])
+    .update({ is_active: false, is_deleted: true })
+    .eq("id", item.id)
+    .select("id, is_deleted")
+    .single();
+  if (error) {
+    throw error;
+  }
+  if (!data || data.is_deleted !== true) {
+    throw new Error("項目を削除できませんでした");
   }
 
   invalidateMasterCache(type);

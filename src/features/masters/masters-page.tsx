@@ -39,7 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { archiveMasterItem, listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
+import { archiveMasterItem, deleteMasterItem, listMasterItems, reorderMasterItems, upsertMasterItem } from "@/features/masters/master-service";
 import { cn, withSupabaseRecovery } from "@/lib/utils";
 import type { MasterItem, MasterItemType } from "@/types/database";
 
@@ -61,7 +61,7 @@ type MasterFormValues = z.infer<typeof masterSchema>;
 
 const pageLabels: Record<MasterItemType, { title: string; description: string }> = {
   worker: { title: "作業員マスタ", description: "従業員一覧です。作業員ラベルに紐づけて管理します。" },
-  workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベル、単価、日報入力への表示有無を管理します。" },
+  workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベル、単価、日報入力への有効・無効を管理します。" },
   lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
   disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },
   transport: { title: "車両・運搬マスタ", description: "2TC や乗用車など、使用する車両の一覧です。" },
@@ -97,6 +97,7 @@ export function MastersPage() {
   const [editingItem, setEditingItem] = useState<MasterItem | null>(null);
   const [items, setItems] = useState<MasterItem[]>([]);
   const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 14 } }),
@@ -128,8 +129,8 @@ export function MastersPage() {
       const data = await withSupabaseRecovery(
         () =>
           masterType === "worker"
-            ? Promise.all([listMasterItems(masterType, false), listMasterItems("workerLabel", false)])
-            : Promise.all([listMasterItems(masterType, false), Promise.resolve([] as MasterItem[])]),
+            ? Promise.all([listMasterItems(masterType, true), listMasterItems("workerLabel", true)])
+            : Promise.all([listMasterItems(masterType, true), Promise.resolve([] as MasterItem[])]),
         5000,
         `${itemLabel || "マスタ"}の読み込みがタイムアウトしました。再度お試しください。`,
       );
@@ -145,8 +146,25 @@ export function MastersPage() {
   }, [itemLabel, masterType]);
 
   useEffect(() => {
+    setStatusFilter("active");
     void load();
   }, [load]);
+
+  const filteredItems = useMemo(() => {
+    const activeWorkerLabelNames = new Set(workerLabels.filter((label) => label.is_active).map((label) => label.name.trim()));
+    return items.filter((item) => {
+      if (statusFilter === "active" ? !item.is_active : item.is_active) {
+        return false;
+      }
+
+      if (masterType !== "worker") {
+        return true;
+      }
+
+      const groupLabel = item.group_label?.trim();
+      return !groupLabel || activeWorkerLabelNames.has(groupLabel);
+    });
+  }, [items, masterType, statusFilter, workerLabels]);
 
   const openCreate = () => {
     setEditingItem(null);
@@ -202,30 +220,43 @@ export function MastersPage() {
       return;
     }
 
+    const isPermanentDelete = !editingItem.is_active;
     const confirmed = window.confirm(
-      `「${editingItem.name}」を削除します。\nこの項目は今後の日報入力では選べなくなります。\n過去の日報データにはそのまま残ります。`,
+      isPermanentDelete
+        ? `「${editingItem.name}」を削除します。\n削除後はマスタ一覧に表示されなくなります。\n過去の日報データにはそのまま残ります。`
+        : `「${editingItem.name}」を無効にします。\nこの項目は今後の日報入力では選べなくなります。\n無効タブから確認できます。`,
     );
     if (!confirmed) {
       return;
     }
 
     try {
-      await archiveMasterItem(masterType, editingItem);
-      toast.success("項目を削除しました");
+      if (isPermanentDelete) {
+        await deleteMasterItem(masterType, editingItem);
+        toast.success("項目を削除しました");
+      } else {
+        await archiveMasterItem(masterType, editingItem);
+        toast.success("項目を無効にしました");
+      }
       setOpen(false);
       setEditingItem(null);
       setDialogKey((current) => current + 1);
       form.reset({ name: "", group_label: "", unit_price: 0, is_active: true });
       await load({ silent: true });
     } catch (error) {
-      toast.error(getErrorMessage(error, "削除に失敗しました"));
+      toast.error(getErrorMessage(error, isPermanentDelete ? "削除に失敗しました" : "無効化に失敗しました"));
     }
   };
 
-  const persistOrder = async (nextItems: MasterItem[]) => {
+  const persistOrder = async (nextFilteredItems: MasterItem[]) => {
     if (!masterType) {
       return;
     }
+    const nextFilteredQueue = [...nextFilteredItems];
+    const nextItems = items.map((item) => {
+      const matchesFilter = statusFilter === "active" ? item.is_active : !item.is_active;
+      return matchesFilter ? (nextFilteredQueue.shift() ?? item) : item;
+    });
     const normalizedItems = nextItems.map((item, index) => ({ ...item, sort_order: index }));
     setItems(normalizedItems);
     try {
@@ -243,30 +274,30 @@ export function MastersPage() {
       return;
     }
 
-    const currentIndex = items.findIndex((item) => item.id === active.id);
-    const targetIndex = items.findIndex((item) => item.id === over.id);
+    const currentIndex = filteredItems.findIndex((item) => item.id === active.id);
+    const targetIndex = filteredItems.findIndex((item) => item.id === over.id);
     if (currentIndex === -1 || targetIndex === -1) {
       return;
     }
 
-    await persistOrder(arrayMove(items, currentIndex, targetIndex));
+    await persistOrder(arrayMove(filteredItems, currentIndex, targetIndex));
   };
 
   const moveByArrow = async (itemId: string, direction: -1 | 1) => {
-    const currentIndex = items.findIndex((item) => item.id === itemId);
+    const currentIndex = filteredItems.findIndex((item) => item.id === itemId);
     const targetIndex = currentIndex + direction;
-    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= items.length) {
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= filteredItems.length) {
       return;
     }
 
-    await persistOrder(arrayMove(items, currentIndex, targetIndex));
+    await persistOrder(arrayMove(filteredItems, currentIndex, targetIndex));
   };
 
   function SortableMasterCard({ item }: { item: MasterItem }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
       id: item.id,
     });
-    const index = items.findIndex((currentItem) => currentItem.id === item.id);
+    const index = filteredItems.findIndex((currentItem) => currentItem.id === item.id);
 
     return (
       <div
@@ -298,7 +329,7 @@ export function MastersPage() {
                   <GripVertical className="h-4 w-4" />
                 </button>
                   <p className="break-all text-base font-bold sm:text-lg">{item.name}</p>
-                  {masterType !== "workerLabel" ? <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge> : null}
+                  <Badge variant={item.is_active ? "default" : "outline"}>{item.is_active ? "有効" : "無効"}</Badge>
                   {masterType === "worker" && item.group_label ? <Badge variant="outline">{item.group_label}</Badge> : null}
                   {masterType === "workerLabel" ? <Badge variant="outline">単価: {item.unit_price ?? 0}円</Badge> : null}
                 </div>
@@ -324,7 +355,7 @@ export function MastersPage() {
                     size="icon"
                     className="w-full"
                     onClick={() => void moveByArrow(item.id, 1)}
-                    disabled={index === -1 || index >= items.length - 1}
+                    disabled={index === -1 || index >= filteredItems.length - 1}
                   >
                     <ArrowDown className="h-4 w-4" />
                   </Button>
@@ -403,7 +434,7 @@ export function MastersPage() {
                         onChange={(event) => form.setValue("group_label", event.target.value, { shouldDirty: true })}
                       >
                         <option value="">ラベル未設定</option>
-                        {workerLabels.map((label) => (
+                        {workerLabels.filter((label) => label.is_active).map((label) => (
                           <option key={label.id} value={label.name}>
                             {label.name}
                           </option>
@@ -422,12 +453,10 @@ export function MastersPage() {
                     </div>
                   </>
                 ) : null}
-                {masterType !== "workerLabel" ? (
-                  <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
-                    <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
-                    有効な項目として表示する
-                  </label>
-                ) : null}
+                <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
+                  <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
+                  有効な項目として表示する
+                </label>
                 <div className="sticky bottom-0 -mx-6 mt-6 px-6 pb-1 pt-4">
                   <div className="grid gap-2 sm:grid-cols-2">
                     <Button
@@ -442,7 +471,7 @@ export function MastersPage() {
                     >
                       保存する
                     </Button>
-                    {editingItem ? (
+                    {editingItem && !editingItem.is_active ? (
                       <Button type="button" variant="destructive" className="w-full" size="lg" onClick={() => void handleDelete()}>
                         削除
                       </Button>
@@ -495,23 +524,45 @@ export function MastersPage() {
         </Link>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={statusFilter === "active" ? "default" : "outline"}
+          onClick={() => setStatusFilter("active")}
+        >
+          有効
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={statusFilter === "inactive" ? "default" : "outline"}
+          onClick={() => setStatusFilter("inactive")}
+        >
+          無効
+        </Button>
+      </div>
+
       {loading ? (
         <LoadingState message={`${itemLabel || "マスタ"}を読み込んでいます...`} showProgress expectedDurationMs={3000} />
       ) : error ? (
         <ErrorState message={error} onRetry={() => void load()} />
-      ) : items.length === 0 ? (
-        <EmptyState title="項目がありません" description="最初の項目を追加してください。" />
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          title={statusFilter === "active" ? "有効な項目がありません" : "無効な項目がありません"}
+          description={statusFilter === "active" ? "項目を追加するか、無効な項目を有効にしてください。" : "無効にした項目はここに表示されます。"}
+        />
       ) : open ? (
         <div className="grid gap-3">
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <SortableMasterCard key={item.id} item={item} />
           ))}
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(event) => void handleDragEnd(event)}>
-          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={filteredItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
             <div className="grid gap-3">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <SortableMasterCard key={item.id} item={item} />
               ))}
             </div>

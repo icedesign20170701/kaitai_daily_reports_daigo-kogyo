@@ -34,7 +34,7 @@ import type {
 } from "@/types/database";
 
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
-const subcontractorCountOptions = Array.from({ length: 21 }, (_, index) => index);
+const subcontractorCountOptions = Array.from({ length: 11 }, (_, index) => index);
 const MANUAL_SITE_OPTION = "__manual__";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "kaitai-sidebar-collapsed";
 const disposalTypeOptions = [
@@ -321,9 +321,8 @@ function WorkerGroup({
   onToggle: (itemId: string, checked: boolean) => void;
   onChangeCount?: (count: number) => void;
 }) {
-  if (items.length === 0) return null;
-
   const isDaigoGroup = title.includes("大吾興業");
+  if (isDaigoGroup && items.length === 0) return null;
 
   if (!isDaigoGroup && onChangeCount) {
     const selectedCount = externalCount ?? 0;
@@ -350,7 +349,7 @@ function WorkerGroup({
             <span className="text-sm">人</span>
           </div>
         </div>
-        {selectedCount > 0 ? (
+        {selectedCount > 0 && items.length > 0 ? (
           <div className="border-t pt-3">
             <div className="flex flex-wrap gap-2">
               {items.map((item) => {

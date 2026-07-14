@@ -25,7 +25,12 @@ import { activateSite, archiveSite, listSites, upsertSite } from "@/features/sit
 import { withSupabaseRecovery } from "@/lib/utils";
 import type { Site } from "@/types/database";
 
-const companyAddress = "大阪府東大阪市高井田西３丁目６−３";
+const companyRouteOrigins = [
+  { area: "kansai", areaLabel: "関西", routeLabel: "会社からの経路(大阪)", address: "大阪府東大阪市高井田西３丁目６−３" },
+  { area: "kanto", areaLabel: "関東", routeLabel: "会社からの経路(埼玉)", address: "〒341-0035 埼玉県三郷市鷹野3-469-1" },
+] as const;
+
+type SiteArea = (typeof companyRouteOrigins)[number]["area"];
 
 function normalizeMapAddress(value: string) {
   return value
@@ -42,13 +47,18 @@ function getMapLink(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(normalizeMapAddress(address))}`;
 }
 
-function getDirectionsLink(destination: string) {
-  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(normalizeMapAddress(companyAddress))}&destination=${encodeURIComponent(normalizeMapAddress(destination))}&travelmode=driving`;
+function getDirectionsLink(origin: string, destination: string) {
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(normalizeMapAddress(origin))}&destination=${encodeURIComponent(normalizeMapAddress(destination))}&travelmode=driving`;
+}
+
+function getRouteOrigin(siteArea: SiteArea) {
+  return companyRouteOrigins.find((origin) => origin.area === siteArea) ?? companyRouteOrigins[0];
 }
 
 const siteSchema = z.object({
   name: z.string().min(1, "現場名を入力してください"),
   address: z.string(),
+  site_area: z.enum(["kansai", "kanto"]),
   is_active: z.boolean(),
 });
 
@@ -66,6 +76,7 @@ export function SitesPage() {
     defaultValues: {
       name: "",
       address: "",
+      site_area: "kansai",
       is_active: true,
     },
   });
@@ -93,7 +104,7 @@ export function SitesPage() {
 
   const openCreate = () => {
     setEditingSite(null);
-    form.reset({ name: "", address: "", is_active: true });
+    form.reset({ name: "", address: "", site_area: "kansai", is_active: true });
     setOpen(true);
   };
 
@@ -102,6 +113,7 @@ export function SitesPage() {
     form.reset({
       name: site.name,
       address: site.address ?? "",
+      site_area: site.site_area ?? "kansai",
       is_active: site.is_active,
     });
     setOpen(true);
@@ -113,6 +125,7 @@ export function SitesPage() {
         id: editingSite?.id,
         name: values.name,
         address: values.address || null,
+        site_area: values.site_area,
         is_active: values.is_active,
       });
       toast.success(editingSite ? "現場を更新しました" : "現場を追加しました");
@@ -173,6 +186,20 @@ export function SitesPage() {
                   <Label htmlFor="site-address">住所</Label>
                   <Input id="site-address" {...form.register("address")} />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="site-area">エリア</Label>
+                  <select
+                    id="site-area"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    {...form.register("site_area")}
+                  >
+                    {companyRouteOrigins.map((origin) => (
+                      <option key={origin.area} value={origin.area}>
+                        {origin.areaLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <label className="flex items-center gap-3 rounded-xl bg-secondary px-3 py-3 text-sm font-medium">
                   <input type="checkbox" className="h-4 w-4" {...form.register("is_active")} />
                   稼働中の現場として扱う
@@ -200,6 +227,9 @@ export function SitesPage() {
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-start gap-2">
                     <p className="min-w-0 flex-1 break-words font-bold">{site.name}</p>
+                    <Badge variant="secondary" className="shrink-0 whitespace-nowrap">
+                      {getRouteOrigin(site.site_area ?? "kansai").areaLabel}
+                    </Badge>
                     <Badge
                       className={site.is_active ? "shrink-0 whitespace-nowrap bg-emerald-600 text-white" : "shrink-0 whitespace-nowrap bg-destructive text-destructive-foreground"}
                     >
@@ -218,13 +248,13 @@ export function SitesPage() {
                         <MapPinned className="h-3.5 w-3.5" />
                       </a>
                       <a
-                        href={getDirectionsLink(site.address)}
+                        href={getDirectionsLink(getRouteOrigin(site.site_area ?? "kansai").address, site.address ?? "")}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground underline underline-offset-2 transition hover:text-foreground"
                       >
                         <Route className="h-3.5 w-3.5" />
-                        会社からの経路
+                        {getRouteOrigin(site.site_area ?? "kansai").routeLabel}
                       </a>
                     </div>
                   ) : (

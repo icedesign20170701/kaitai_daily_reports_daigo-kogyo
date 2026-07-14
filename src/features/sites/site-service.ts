@@ -16,7 +16,7 @@ export async function listSites(includeInactive = true) {
   return (data ?? []) as Site[];
 }
 
-export async function upsertSite(payload: Partial<Site> & Pick<Site, "name" | "address" | "is_active">) {
+export async function upsertSite(payload: Partial<Site> & Pick<Site, "name" | "address" | "site_area" | "is_active">) {
   const { data, error } = await supabase.from("sites").upsert(payload, { onConflict: "id" }).select().single();
   if (error) {
     throw error;

@@ -19,10 +19,14 @@ create table if not exists public.sites (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   address text,
+  site_area text not null default 'kansai' check (site_area in ('kansai', 'kanto')),
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.sites
+add column if not exists site_area text not null default 'kansai' check (site_area in ('kansai', 'kanto'));
 
 create table if not exists public.daily_reports (
   id uuid primary key default gen_random_uuid(),

@@ -9,6 +9,7 @@ export type BaseRow = {
 export type Site = BaseRow & {
   name: string;
   address: string | null;
+  site_area: "kansai" | "kanto";
   is_active: boolean;
 };
 

@@ -12,7 +12,6 @@ const tableMap: Record<MasterItemType, string> = {
 };
 
 const masterCache = new Map<string, MasterItem[]>();
-const allowedDisposalUnitNames = new Set(["TC", "TL", "TP"]);
 
 function getCacheKey(type: MasterItemType, includeInactive: boolean) {
   return `${type}:${includeInactive ? "all" : "active"}`;
@@ -50,7 +49,7 @@ export async function listMasterItems(type: MasterItemType, includeInactive = tr
       return true;
     }
 
-    return allowedDisposalUnitNames.has(item.name) && allItems.findIndex((candidate) => candidate.name === item.name) === index;
+    return allItems.findIndex((candidate) => candidate.name === item.name) === index;
   });
   masterCache.set(cacheKey, items);
   return items;

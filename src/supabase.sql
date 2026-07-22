@@ -141,7 +141,7 @@ alter table public.disposal_units
   add column if not exists is_deleted boolean not null default false;
 
 delete from public.disposal_units
-where name not in ('TC', 'TL', 'TP');
+where name in ('CT', 'PG');
 
 delete from public.disposal_units
 where id in (
@@ -151,7 +151,6 @@ where id in (
       id,
       row_number() over (partition by name order by sort_order, created_at, id) as row_number
     from public.disposal_units
-    where name in ('TC', 'TL', 'TP')
   ) as duplicated_units
   where duplicated_units.row_number > 1
 );

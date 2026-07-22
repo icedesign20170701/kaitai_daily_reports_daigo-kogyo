@@ -135,6 +135,7 @@ export function ReportDetailPage() {
   const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
   const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
+  const [disposalUnits, setDisposalUnits] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
   const [photoGalleryIndex, setPhotoGalleryIndex] = useState<number | null>(null);
 
@@ -146,7 +147,7 @@ export function ReportDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [detail, siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+      const [detail, siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, disposalUnitData, transportData] = await withSupabaseRecovery(
         () => Promise.all([
           getReportDetail(id),
           listSites(false),
@@ -155,6 +156,7 @@ export function ReportDetailPage() {
           listMasterItems("workerLabel", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
+          listMasterItems("disposalUnit", false),
           listMasterItems("transport", false),
         ]),
         10000,
@@ -167,6 +169,7 @@ export function ReportDetailPage() {
       setWorkerLabels(workerLabelData);
       setLeaseItems(leaseData);
       setDisposalItems(disposalData);
+      setDisposalUnits(disposalUnitData);
       setTransportItems(transportData);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "日報の取得に失敗しました");
@@ -245,7 +248,10 @@ export function ReportDetailPage() {
     () =>
       report?.disposal_entries
         .filter((entry) => entry.ton_count > 0 || entry.truck_count > 0)
-        .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.waste_type === "other" ? entry.other_label || "その他" : getDisposalTypeLabel(entry.waste_type)}: ${entry.ton_count}T${entry.truck_count}台`) ?? [],
+        .map(
+          (entry) =>
+            `${entry.item?.name ?? "未設定"} / ${entry.waste_type === "other" ? entry.other_label || "その他" : getDisposalTypeLabel(entry.waste_type)}: ${entry.ton_count}${entry.ton_unit || "TC"}${entry.truck_count}台`,
+        ) ?? [],
     [report],
   );
   const transportRows = useMemo(
@@ -301,6 +307,7 @@ export function ReportDetailPage() {
           workerLabels={workerLabels}
           leaseItems={leaseItems}
           disposalItems={disposalItems}
+          disposalUnits={disposalUnits}
           transportItems={transportItems}
           reporterName={report.reporter_name ?? appUser?.display_name ?? null}
           isSubcontractor={appUser?.is_subcontractor ?? false}

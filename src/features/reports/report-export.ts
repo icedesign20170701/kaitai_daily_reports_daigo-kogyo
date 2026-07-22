@@ -134,7 +134,7 @@ export async function exportReportsCsv(
         csvEscape(
           report.disposal_entries
             .filter((entry) => entry.ton_count > 0 || entry.truck_count > 0)
-            .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.waste_type === "other" ? entry.other_label || "その他" : disposalTypeLabel(entry.waste_type)}:${entry.ton_count}T${entry.truck_count}台`)
+            .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.waste_type === "other" ? entry.other_label || "その他" : disposalTypeLabel(entry.waste_type)}:${entry.ton_count}${entry.ton_unit || "TC"}${entry.truck_count}台`)
             .join("\n"),
         ),
         csvEscape(vehicleSummary(report)),

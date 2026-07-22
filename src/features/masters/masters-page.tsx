@@ -64,6 +64,7 @@ const pageLabels: Record<MasterItemType, { title: string; description: string }>
   workerLabel: { title: "作業員ラベルマスタ", description: "所属ラベル、単価、日報入力への有効・無効を管理します。" },
   lease: { title: "リース関係マスタ", description: "ニシコンや城東リースなど、リース先の一覧です。" },
   disposal: { title: "ゴミ処分マスタ", description: "エイシンやRSKなど、処分先の一覧です。" },
+  disposalUnit: { title: "ゴミ処分単位マスタ", description: "TC、TL、TPなど、ゴミ処分の数量単位を管理します。" },
   transport: { title: "車両・運搬マスタ", description: "2TC や乗用車など、使用する車両の一覧です。" },
   workCategory: { title: "工事分類マスタ", description: "内装解体工事や土木工事など、工事分類を管理します。" },
 };
@@ -73,6 +74,7 @@ const itemLabels: Record<MasterItemType, string> = {
   workerLabel: "作業員ラベル",
   lease: "リース関係",
   disposal: "ゴミ処分",
+  disposalUnit: "ゴミ処分単位",
   transport: "車両・運搬",
   workCategory: "工事分類",
 };
@@ -82,6 +84,7 @@ const routeTypeMap: Record<string, MasterItemType> = {
   "worker-labels": "workerLabel",
   "lease-items": "lease",
   "disposal-items": "disposal",
+  "disposal-units": "disposalUnit",
   "transport-items": "transport",
   "work-categories": "workCategory",
 };
@@ -503,6 +506,12 @@ export function MastersPage() {
           className={cn(buttonVariants({ variant: masterType === "disposal" ? "default" : "outline", size: "sm" }))}
         >
           ゴミ処分
+        </Link>
+        <Link
+          to="/masters/disposal-units"
+          className={cn(buttonVariants({ variant: masterType === "disposalUnit" ? "default" : "outline", size: "sm" }))}
+        >
+          ゴミ処分単位
         </Link>
         <Link
           to="/masters/transport-items"

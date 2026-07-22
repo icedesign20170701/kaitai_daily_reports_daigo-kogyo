@@ -13,7 +13,7 @@ export type Site = BaseRow & {
   is_active: boolean;
 };
 
-export type MasterItemType = "worker" | "workerLabel" | "lease" | "disposal" | "transport" | "workCategory";
+export type MasterItemType = "worker" | "workerLabel" | "lease" | "disposal" | "disposalUnit" | "transport" | "workCategory";
 
 export type MasterItem = BaseRow & {
   name: string;
@@ -56,6 +56,7 @@ export type ReportDisposalEntry = {
   waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "asbestos" | "other";
   other_label: string;
   ton_count: number;
+  ton_unit: string;
   truck_count: number;
   item?: MasterItem | null;
 };

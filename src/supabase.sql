@@ -127,6 +127,54 @@ create table if not exists public.disposal_items (
 alter table public.disposal_items
   add column if not exists is_deleted boolean not null default false;
 
+create table if not exists public.disposal_units (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  sort_order integer not null default 0,
+  is_active boolean not null default true,
+  is_deleted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.disposal_units
+  add column if not exists is_deleted boolean not null default false;
+
+delete from public.disposal_units
+where name not in ('TC', 'TL', 'TP');
+
+delete from public.disposal_units
+where id in (
+  select id
+  from (
+    select
+      id,
+      row_number() over (partition by name order by sort_order, created_at, id) as row_number
+    from public.disposal_units
+    where name in ('TC', 'TL', 'TP')
+  ) as duplicated_units
+  where duplicated_units.row_number > 1
+);
+
+insert into public.disposal_units (name, sort_order)
+select unit_name, sort_order
+from (
+  values
+    ('TC', 0),
+    ('TL', 1),
+    ('TP', 2)
+) as defaults(unit_name, sort_order)
+where not exists (
+  select 1
+  from public.disposal_units
+  where disposal_units.name = defaults.unit_name
+    and disposal_units.is_deleted = false
+);
+
+create unique index if not exists idx_disposal_units_name_not_deleted
+on public.disposal_units (name)
+where is_deleted = false;
+
 create table if not exists public.transport_items (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -188,6 +236,7 @@ create table if not exists public.daily_report_disposal_items (
   waste_type text not null default 'wood',
   other_label text,
   ton_count integer not null default 0,
+  ton_unit text not null default 'TC',
   truck_count integer not null default 0,
   created_at timestamptz not null default now()
 );
@@ -197,6 +246,12 @@ alter table public.daily_report_disposal_items
 
 alter table public.daily_report_disposal_items
   add column if not exists other_label text;
+
+alter table public.daily_report_disposal_items
+  add column if not exists ton_unit text not null default 'TC';
+
+alter table public.daily_report_disposal_items
+  alter column ton_unit set default 'TC';
 
 create table if not exists public.daily_report_transport_items (
   id uuid primary key default gen_random_uuid(),
@@ -426,13 +481,14 @@ begin
 
   delete from public.daily_report_disposal_items where report_id = v_report_id;
   if coalesce(jsonb_array_length(coalesce(p_disposal_entries, '[]'::jsonb)), 0) > 0 then
-    insert into public.daily_report_disposal_items (report_id, disposal_item_id, waste_type, other_label, ton_count, truck_count)
+    insert into public.daily_report_disposal_items (report_id, disposal_item_id, waste_type, other_label, ton_count, ton_unit, truck_count)
     select
       v_report_id,
       (entry->>'disposal_item_id')::uuid,
       coalesce(nullif(entry->>'waste_type', ''), 'wood'),
       nullif(trim(entry->>'other_label'), ''),
       coalesce((entry->>'ton_count')::integer, 0),
+      coalesce(nullif(trim(entry->>'ton_unit'), ''), 'TC'),
       coalesce((entry->>'truck_count')::integer, 0)
     from jsonb_array_elements(coalesce(p_disposal_entries, '[]'::jsonb)) as entry
     where coalesce((entry->>'disposal_item_id')::text, '') <> ''
@@ -502,6 +558,11 @@ create trigger set_disposal_items_updated_at
 before update on public.disposal_items
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_disposal_units_updated_at on public.disposal_units;
+create trigger set_disposal_units_updated_at
+before update on public.disposal_units
+for each row execute function public.set_updated_at();
+
 drop trigger if exists set_transport_items_updated_at on public.transport_items;
 create trigger set_transport_items_updated_at
 before update on public.transport_items
@@ -515,6 +576,7 @@ alter table public.worker_labels enable row level security;
 alter table public.work_categories enable row level security;
 alter table public.lease_items enable row level security;
 alter table public.disposal_items enable row level security;
+alter table public.disposal_units enable row level security;
 alter table public.transport_items enable row level security;
 alter table public.daily_report_workers enable row level security;
 alter table public.daily_report_external_workers enable row level security;
@@ -618,6 +680,14 @@ with check (true);
 drop policy if exists "authenticated users can manage disposal_items" on public.disposal_items;
 create policy "authenticated users can manage disposal_items"
 on public.disposal_items
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "authenticated users can manage disposal_units" on public.disposal_units;
+create policy "authenticated users can manage disposal_units"
+on public.disposal_units
 for all
 to authenticated
 using (true)
@@ -743,6 +813,7 @@ comment on table public.workers is '作業員マスタ。group_label には work
 comment on table public.worker_labels is '作業員ラベルマスタ。会社や所属ラベルと1人あたり単価を管理する。';
 comment on table public.lease_items is 'リース関係マスタ。ニシコンや城東リースなどを管理する。';
 comment on table public.disposal_items is 'ゴミ処分マスタ。エイシンやRSKなどを管理する。';
+comment on table public.disposal_units is 'ゴミ処分の数量単位マスタ。TC、TL、TPなどを管理する。';
 comment on table public.transport_items is '車両・運搬マスタ。2TCや乗用車などを管理する。';
 comment on column public.report_photos.image_path is '外部ストレージまたは自社サーバーに保存した画像URLを格納する。';
 

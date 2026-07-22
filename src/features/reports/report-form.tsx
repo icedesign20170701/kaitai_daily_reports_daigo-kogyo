@@ -47,6 +47,19 @@ const disposalTypeOptions = [
   { value: "other", label: "その他" },
 ] as const;
 
+const FALLBACK_DISPOSAL_UNITS = ["TC", "TL", "TP"];
+
+function getDisposalUnitNames(items: MasterItem[]) {
+  const names = items.map((item) => item.name.trim()).filter(Boolean);
+  const uniqueNames = Array.from(new Set(names));
+  return uniqueNames.length > 0 ? uniqueNames : FALLBACK_DISPOSAL_UNITS;
+}
+
+function normalizeDisposalUnit(value: string | null | undefined, options: string[]) {
+  const normalizedValue = value?.trim() ?? "";
+  return options.includes(normalizedValue) ? normalizedValue : options[0] ?? FALLBACK_DISPOSAL_UNITS[0];
+}
+
 const reportSchema = z
   .object({
     report_date: z.string().min(1, "作業日を入力してください"),
@@ -78,6 +91,7 @@ const reportSchema = z
         waste_type: z.enum(["wood", "board", "rubble", "scrap", "mixed", "asbestos", "other"]),
         other_label: z.string().trim().max(100, "100文字以内で入力してください"),
         ton_count: z.coerce.number().min(0),
+        ton_unit: z.string().trim().min(1).max(20).default(FALLBACK_DISPOSAL_UNITS[0]),
         truck_count: z.coerce.number().min(0),
       }),
     ),
@@ -138,7 +152,7 @@ const reportSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["disposal_entries", index, "ton_count"],
-          message: "T または 台数のどちらかを1以上にしてください",
+          message: "単位付き数量または台数のどちらかを1以上にしてください",
         });
       }
     });
@@ -504,17 +518,19 @@ function QuantitySelect({
   onChange,
   placeholder = "0",
   fieldPath,
+  className,
 }: {
   value: number;
   onChange: (value: number) => void;
   placeholder?: string;
   fieldPath?: string;
+  className?: string;
 }) {
   return (
     <div className="relative">
       <select
         data-field-path={fieldPath}
-        className="flex h-11 w-[96px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+        className={cn("flex h-11 w-[96px] appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm", className)}
         value={String(value)}
         aria-label={placeholder}
         onChange={(event) => onChange(Number(event.target.value))}
@@ -595,7 +611,9 @@ function DisposalItemRows({
   onChangeType,
   onChangeOtherLabel,
   onChangeTon,
+  onChangeTonUnit,
   onChangeTruck,
+  disposalUnitOptions,
 }: {
   item: MasterItem;
   rows: Array<{ fieldIndex: number; entry: ReportDisposalEntry }>;
@@ -605,7 +623,9 @@ function DisposalItemRows({
   onChangeType: (index: number, value: ReportDisposalEntry["waste_type"]) => void;
   onChangeOtherLabel: (index: number, value: string) => void;
   onChangeTon: (index: number, value: number) => void;
+  onChangeTonUnit: (index: number, value: string) => void;
   onChangeTruck: (index: number, value: number) => void;
+  disposalUnitOptions: string[];
 }) {
   return (
     <div className="rounded-2xl border bg-background p-3">
@@ -618,7 +638,8 @@ function DisposalItemRows({
       </div>
       <div className="space-y-2">
         {rows.length === 0 ? <p className="text-sm text-muted-foreground">追加ボタンで入力欄を増やせます。</p> : null}
-        {rows.map(({ fieldIndex, entry }, index) => (
+        {rows.map(({ fieldIndex, entry }, index) => {
+          return (
           <div key={`${item.id}-${fieldIndex}`} className="space-y-2 rounded-xl border px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">{index + 1}.</span>
@@ -646,9 +667,23 @@ function DisposalItemRows({
                   placeholder="ゴミ名称を入力"
                 />
               ) : null}
-              <QuantitySelect fieldPath={`disposal_entries.${fieldIndex}.ton_count`} value={entry.ton_count} onChange={(value) => onChangeTon(fieldIndex, value)} />
-              <span className="text-sm">T</span>
-              <QuantitySelect fieldPath={`disposal_entries.${fieldIndex}.truck_count`} value={entry.truck_count} onChange={(value) => onChangeTruck(fieldIndex, value)} />
+              <QuantitySelect className="w-[70px]" fieldPath={`disposal_entries.${fieldIndex}.ton_count`} value={entry.ton_count} onChange={(value) => onChangeTon(fieldIndex, value)} />
+              <div className="relative">
+                <select
+                  data-field-path={`disposal_entries.${fieldIndex}.ton_unit`}
+                  className="flex h-11 w-20 appearance-none rounded-xl border bg-card px-3 py-2 pr-8 text-left text-base shadow-sm outline-none md:text-sm"
+                  value={normalizeDisposalUnit(entry.ton_unit, disposalUnitOptions)}
+                  onChange={(event) => onChangeTonUnit(fieldIndex, event.target.value)}
+                >
+                  {disposalUnitOptions.map((option, optionIndex) => (
+                    <option key={`${option}-${optionIndex}`} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+              </div>
+              <QuantitySelect className="w-[70px]" fieldPath={`disposal_entries.${fieldIndex}.truck_count`} value={entry.truck_count} onChange={(value) => onChangeTruck(fieldIndex, value)} />
               <span className="text-sm">台</span>
               <Button type="button" variant="ghost" size="icon" className="ml-auto" onClick={() => onRemove(fieldIndex)}>
                 <Trash2 className="h-4 w-4" />
@@ -657,7 +692,8 @@ function DisposalItemRows({
             {errors?.[fieldIndex]?.other_label ? <p className="text-sm text-destructive">{errors[fieldIndex]?.other_label}</p> : null}
             {errors?.[fieldIndex]?.ton_count ? <p className="text-sm text-destructive">{errors[fieldIndex]?.ton_count}</p> : null}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -761,6 +797,7 @@ export function ReportForm({
   workerLabels,
   leaseItems,
   disposalItems,
+  disposalUnits,
   transportItems,
   reporterName,
   isSubcontractor = false,
@@ -775,6 +812,7 @@ export function ReportForm({
   workerLabels: MasterItem[];
   leaseItems: MasterItem[];
   disposalItems: MasterItem[];
+  disposalUnits: MasterItem[];
   transportItems: MasterItem[];
   reporterName?: string | null;
   isSubcontractor?: boolean;
@@ -788,6 +826,8 @@ export function ReportForm({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const draftKey = initialReport ? `report-form-draft:${initialReport.id}` : "report-form-draft:new";
   const scrollKey = `${draftKey}:scroll`;
+  const disposalUnitOptions = useMemo(() => getDisposalUnitNames(disposalUnits), [disposalUnits]);
+  const defaultDisposalUnit = disposalUnitOptions[0] ?? FALLBACK_DISPOSAL_UNITS[0];
   const restoredDraftKeyRef = useRef<string | null>(null);
   const canPersistDraftRef = useRef(false);
   const defaultValues = useMemo<ReportSchemaValues>(
@@ -819,6 +859,7 @@ export function ReportForm({
           waste_type: entry.waste_type,
           other_label: entry.other_label,
           ton_count: entry.ton_count,
+          ton_unit: normalizeDisposalUnit(entry.ton_unit, disposalUnitOptions),
           truck_count: entry.truck_count,
         })) ?? [],
       transport_entries:
@@ -832,7 +873,7 @@ export function ReportForm({
       remarks: initialReport?.remarks ?? "",
       progress_status: initialReport?.progress_status ?? "continuing",
     }),
-    [initialReport, isSubcontractor, reporterName],
+    [disposalUnitOptions, initialReport, isSubcontractor, reporterName],
   );
   const form = useForm<ReportSchemaValues>({
     resolver: zodResolver(reportSchema),
@@ -878,7 +919,12 @@ export function ReportForm({
           ? parsedDraft.external_worker_entries
           : defaultValues.external_worker_entries,
         lease_entries: Array.isArray(parsedDraft.lease_entries) ? parsedDraft.lease_entries : defaultValues.lease_entries,
-        disposal_entries: Array.isArray(parsedDraft.disposal_entries) ? parsedDraft.disposal_entries : defaultValues.disposal_entries,
+        disposal_entries: Array.isArray(parsedDraft.disposal_entries)
+          ? parsedDraft.disposal_entries.map((entry) => ({
+              ...entry,
+              ton_unit: normalizeDisposalUnit(entry.ton_unit, disposalUnitOptions),
+            }))
+          : defaultValues.disposal_entries,
         transport_entries: Array.isArray(parsedDraft.transport_entries) ? parsedDraft.transport_entries : defaultValues.transport_entries,
         other_vehicle_entries: Array.isArray(parsedDraft.other_vehicle_entries)
           ? parsedDraft.other_vehicle_entries
@@ -1336,12 +1382,14 @@ export function ReportForm({
                     rows={disposalEntries
                       .map((entry, index) => ({ fieldIndex: index, entry }))
                       .filter(({ entry }) => entry.disposal_item_id === item.id)}
-                    onAdd={() => disposalArray.append({ disposal_item_id: item.id, waste_type: "wood", other_label: "", ton_count: 0, truck_count: 0 })}
+                    onAdd={() => disposalArray.append({ disposal_item_id: item.id, waste_type: "wood", other_label: "", ton_count: 0, ton_unit: defaultDisposalUnit, truck_count: 0 })}
                     onRemove={(index) => disposalArray.remove(index)}
                     onChangeType={(index, value) => form.setValue(`disposal_entries.${index}.waste_type`, value, { shouldDirty: true })}
                     onChangeOtherLabel={(index, value) => form.setValue(`disposal_entries.${index}.other_label`, value, { shouldDirty: true })}
                     onChangeTon={(index, value) => form.setValue(`disposal_entries.${index}.ton_count`, value, { shouldDirty: true })}
+                    onChangeTonUnit={(index, value) => form.setValue(`disposal_entries.${index}.ton_unit`, value, { shouldDirty: true })}
                     onChangeTruck={(index, value) => form.setValue(`disposal_entries.${index}.truck_count`, value, { shouldDirty: true })}
+                    disposalUnitOptions={disposalUnitOptions}
                   />
                 ))}
               </div>

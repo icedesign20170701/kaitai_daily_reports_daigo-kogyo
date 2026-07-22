@@ -27,13 +27,14 @@ export function ReportFormPage() {
   const [workerLabels, setWorkerLabels] = useState<MasterItem[]>([]);
   const [leaseItems, setLeaseItems] = useState<MasterItem[]>([]);
   const [disposalItems, setDisposalItems] = useState<MasterItem[]>([]);
+  const [disposalUnits, setDisposalUnits] = useState<MasterItem[]>([]);
   const [transportItems, setTransportItems] = useState<MasterItem[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, transportData] = await withSupabaseRecovery(
+      const [siteData, workCategoryData, workerData, workerLabelData, leaseData, disposalData, disposalUnitData, transportData] = await withSupabaseRecovery(
         () => Promise.all([
           listSites(false),
           listMasterItems("workCategory", false),
@@ -41,6 +42,7 @@ export function ReportFormPage() {
           listMasterItems("workerLabel", false),
           listMasterItems("lease", false),
           listMasterItems("disposal", false),
+          listMasterItems("disposalUnit", false),
           listMasterItems("transport", false),
         ]),
         10000,
@@ -52,6 +54,7 @@ export function ReportFormPage() {
       setWorkerLabels(workerLabelData);
       setLeaseItems(leaseData);
       setDisposalItems(disposalData);
+      setDisposalUnits(disposalUnitData);
       setTransportItems(transportData);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "初期データの取得に失敗しました");
@@ -116,6 +119,7 @@ export function ReportFormPage() {
           workerLabels={workerLabels}
           leaseItems={leaseItems}
           disposalItems={disposalItems}
+          disposalUnits={disposalUnits}
           transportItems={transportItems}
           reporterName={appUser?.display_name ?? null}
           isSubcontractor={isSubcontractor}

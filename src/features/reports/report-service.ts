@@ -105,7 +105,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
     supabase.from("daily_report_lease_items").select("id, lease_item_id, item_name, count, lease_items(*)").eq("report_id", id).order("created_at"),
     supabase
       .from("daily_report_disposal_items")
-      .select("id, disposal_item_id, waste_type, other_label, ton_count, truck_count, disposal_items(*)")
+      .select("id, disposal_item_id, waste_type, other_label, ton_count, ton_unit, truck_count, disposal_items(*)")
       .eq("report_id", id)
       .order("created_at"),
     supabase
@@ -184,6 +184,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
       waste_type: "wood" | "board" | "rubble" | "scrap" | "mixed" | "asbestos" | "other";
       other_label: string | null;
       ton_count: number;
+      ton_unit: string | null;
       truck_count: number;
       disposal_items: MasterItem | MasterItem[] | null;
     }>).map((row) => ({
@@ -192,6 +193,7 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
       waste_type: row.waste_type,
       other_label: row.other_label ?? "",
       ton_count: row.ton_count,
+      ton_unit: row.ton_unit ?? "TC",
       truck_count: row.truck_count,
       item: normalizeJoinedItem(row.disposal_items),
     })),

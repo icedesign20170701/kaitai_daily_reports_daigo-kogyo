@@ -221,6 +221,10 @@ export async function getReportDetail(id: string): Promise<DailyReportDetail> {
 
 export async function saveReport(values: ReportFormValues, _userId: string, reportId?: string, newFiles: File[] = []): Promise<SaveReportResult> {
   const otherVehicleEntries = values.other_vehicle_entries.filter((entry) => entry.label.trim() && entry.count > 0);
+  const disposalEntries = values.disposal_entries.map((entry) => ({
+    ...entry,
+    ton_unit: entry.ton_unit?.trim() || "TC",
+  }));
   const siteId = values.site_id === "__manual__" ? null : values.site_id || null;
 
   const { data, error } = await supabase.rpc("save_daily_report", {
@@ -242,7 +246,7 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
     p_worker_ids: values.worker_ids,
     p_external_worker_entries: values.external_worker_entries,
     p_lease_entries: values.lease_entries,
-    p_disposal_entries: values.disposal_entries,
+    p_disposal_entries: disposalEntries,
     p_transport_entries: values.transport_entries,
   });
   if (error) throw normalizeReportSaveError(error);

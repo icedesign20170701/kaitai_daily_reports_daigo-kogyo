@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { endOfMonth, format, startOfMonth, subMonths, addMonths } from "date-fns";
+import { endOfMonth, format, startOfMonth, subMonths, addMonths, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
 import { PageHeader } from "@/components/app/page-header";
 import { PageShell } from "@/components/app/page-shell";
@@ -128,17 +128,30 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 
 export function ReportsPage() {
   const { user, appUser, isMaster } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [workCategories, setWorkCategories] = useState<MasterItem[]>([]);
   const [appUsers, setAppUsers] = useState<AppUser[]>([]);
-  const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
+  const month = searchParams.get("month");
+  const currentMonth = useMemo(() => {
+    return month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
+      ? parseISO(`${month}-01`)
+      : startOfMonth(new Date());
+  }, [month]);
+  const setCurrentMonth = (date: Date) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("month", format(date, "yyyy-MM"));
+      return next;
+    }, { replace: true });
+  };
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    from: toDateInputValue(startOfMonth(new Date())),
-    to: toDateInputValue(endOfMonth(new Date())),
+    from: toDateInputValue(startOfMonth(currentMonth)),
+    to: toDateInputValue(endOfMonth(currentMonth)),
     siteId: "all",
     workCategoryId: "all",
     createdBy: "all",
@@ -256,10 +269,10 @@ export function ReportsPage() {
         <CardContent className="space-y-4 pt-5">
           <div className="grid gap-4 md:hidden">
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => subMonths(current, 1))}>
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => addMonths(current, 1))}>
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -278,10 +291,10 @@ export function ReportsPage() {
 
           <div className="hidden gap-4 md:grid md:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(220px,0.8fr)_minmax(120px,auto)_minmax(120px,auto)]">
             <div className="flex items-center gap-2 md:justify-center">
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => subMonths(current, 1))}>
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth((current) => addMonths(current, 1))}>
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

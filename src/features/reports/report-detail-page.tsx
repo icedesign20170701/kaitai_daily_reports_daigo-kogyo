@@ -414,7 +414,7 @@ export function ReportDetailPage() {
             </CardContent>
           </Card>
 
-          <Link to="/reports" className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}>
+          <Link to={`/reports?month=${report.report_date.slice(0, 7)}`} className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}>
             一覧へ戻る
           </Link>
         </div>

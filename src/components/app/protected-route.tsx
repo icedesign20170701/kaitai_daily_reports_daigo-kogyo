@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/features/auth/auth-context";
+import { ErrorState } from "@/components/app/states";
 
 export function ProtectedRoute() {
-  const { user, loading } = useAuth();
+  const { user, loading, error, retry } = useAuth();
   const location = useLocation();
   const [progress, setProgress] = useState(5);
 
@@ -26,6 +27,10 @@ export function ProtectedRoute() {
       window.clearInterval(intervalId);
     };
   }, [loading]);
+
+  if (error) {
+    return <div className="mx-auto max-w-lg p-4"><ErrorState message={error} onRetry={retry} /></div>;
+  }
 
   if (loading) {
     return (

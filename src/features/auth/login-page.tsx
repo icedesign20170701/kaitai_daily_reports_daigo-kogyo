@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/features/auth/auth-context";
 import { signInWithPassword } from "@/features/auth/auth-service";
 import { supabaseConfigError } from "@/lib/supabase";
+import { ErrorState } from "@/components/app/states";
 
 const loginSchema = z.object({
   email: z.string().email("正しいメールアドレスを入力してください"),
@@ -23,7 +24,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, loading } = useAuth();
+  const { user, loading, error, retry } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? "/reports";
@@ -35,6 +36,10 @@ export function LoginPage() {
       password: "",
     },
   });
+
+  if (error) {
+    return <div className="mx-auto max-w-lg p-4"><ErrorState message={error} onRetry={retry} /></div>;
+  }
 
   if (!loading && user) {
     return <Navigate to={from} replace />;

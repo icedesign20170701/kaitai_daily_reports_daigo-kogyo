@@ -106,7 +106,7 @@ export async function withSupabaseRecovery<T>(
     if (!isRecoverableLoadError(error)) {
       throw error;
     }
-    await recoverSupabaseConnection();
+    await withTimeout(recoverSupabaseConnection(), 5000, "接続の復旧がタイムアウトしました。再試行してください。");
     await sleep(250);
     return withTimeout(Promise.resolve(loader()), timeoutMs, message);
   }

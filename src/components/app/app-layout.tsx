@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/features/auth/auth-service";
 import { useAuth } from "@/features/auth/auth-context";
+import logoMark from "@/assets/svg/daigo_kogyo_logo.svg";
 
 const navItems = [
   { to: "/reports", label: "日報", icon: ClipboardList },
@@ -32,7 +33,7 @@ export function AppLayout() {
       ? "現場管理"
       : location.pathname.startsWith("/masters")
         ? "マスタ管理"
-        : "日報管理";
+        : "大吾興業 作業日報";
 
   useEffect(() => {
     if (!isSubcontractor) {
@@ -151,9 +152,12 @@ export function AppLayout() {
         {!isReportEditingScreen ? (
           <header className="border-b border-white/50 bg-background/85 backdrop-blur-xl md:sticky md:top-0 md:z-20">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-6">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Daily Reports</p>
-                <h1 className="text-lg font-extrabold tracking-tight">{heading}</h1>
+              <div className="flex gap-1 items-center md:gap-4">
+                <img src={logoMark} alt="株式会社 大吾興業" className="w-[3rem] h-[3rem] md:w-[3.5rem] md:h-[3.5rem]"/>
+                <div className="flex flex-col flex-wrap">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">Daily Reports</p>
+                  <h1 className="text-lg font-extrabold tracking-tight">{heading}</h1>
+                </div>
               </div>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
                 <LogOut className="h-4 w-4" />

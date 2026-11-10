@@ -34,7 +34,9 @@ import type {
 } from "@/types/database";
 
 const numberOptions = Array.from({ length: 11 }, (_, index) => index);
-const subcontractorCountOptions = Array.from({ length: 11 }, (_, index) => index);
+const OTHER_WORKER_LABEL = "その他従業員";
+const MAX_OTHER_WORKER_COUNT = 40;
+const otherWorkerCountOptions = Array.from({ length: MAX_OTHER_WORKER_COUNT + 1 }, (_, index) => index);
 const MANUAL_SITE_OPTION = "__manual__";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "kaitai-sidebar-collapsed";
 const disposalTypeOptions = [
@@ -60,7 +62,7 @@ function normalizeDisposalUnit(value: string | null | undefined, options: string
   return options.includes(normalizedValue) ? normalizedValue : options[0] ?? FALLBACK_DISPOSAL_UNITS[0];
 }
 
-const reportSchema = z
+const createReportSchema = (otherWorkerLabelIds: Set<string>) => z
   .object({
     report_date: z.string().min(1, "作業日を入力してください"),
     reporter_name: z.string().trim().min(1, "記入者名を入力してください").max(100, "100文字以内で入力してください"),
@@ -124,6 +126,16 @@ const reportSchema = z
       }
     }
 
+    values.external_worker_entries.forEach((entry, index) => {
+      if (otherWorkerLabelIds.has(entry.worker_label_id) && entry.count > MAX_OTHER_WORKER_COUNT) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["external_worker_entries", index, "count"],
+          message: `${MAX_OTHER_WORKER_COUNT}人以下を選択してください`,
+        });
+      }
+    });
+
     values.lease_entries.forEach((entry, index) => {
       if (!entry.label.trim()) {
         ctx.addIssue({
@@ -186,7 +198,7 @@ const reportSchema = z
     });
   });
 
-type ReportSchemaValues = z.infer<typeof reportSchema>;
+type ReportSchemaValues = z.infer<ReturnType<typeof createReportSchema>>;
 
 function findFirstErrorPath(errors: FieldErrors<ReportSchemaValues>, prefix = ""): string | null {
   for (const [key, value] of Object.entries(errors)) {
@@ -341,6 +353,9 @@ function WorkerGroup({
 
   if (!isDaigoGroup && onChangeCount) {
     const selectedCount = externalCount ?? 0;
+    const isOtherWorkerGroup = title === OTHER_WORKER_LABEL;
+    const countOptions = isOtherWorkerGroup ? otherWorkerCountOptions : numberOptions;
+    const isOutsideOptions = !countOptions.includes(selectedCount);
 
     return (
       <div className="space-y-3 rounded-xl border bg-background px-3 py-3">
@@ -353,7 +368,12 @@ function WorkerGroup({
                 value={String(selectedCount)}
                 onChange={(event) => onChangeCount(Number(event.target.value))}
               >
-                {subcontractorCountOptions.map((option) => (
+                {isOutsideOptions ? (
+                  <option value={String(selectedCount)} disabled>
+                    {selectedCount}
+                  </option>
+                ) : null}
+                {countOptions.map((option) => (
                   <option key={option} value={String(option)}>
                     {option}
                   </option>
@@ -364,6 +384,9 @@ function WorkerGroup({
             <span className="text-sm">人</span>
           </div>
         </div>
+        {isOtherWorkerGroup && selectedCount > MAX_OTHER_WORKER_COUNT ? (
+          <p className="text-sm text-destructive">{MAX_OTHER_WORKER_COUNT}人以下を選択してください</p>
+        ) : null}
         {selectedCount > 0 && items.length > 0 ? (
           <div className="border-t pt-3">
             <div className="flex flex-wrap gap-2">
@@ -876,6 +899,10 @@ export function ReportForm({
       progress_status: initialReport?.progress_status ?? "continuing",
     }),
     [disposalUnitOptions, initialReport, isSubcontractor, reporterName],
+  );
+  const reportSchema = useMemo(
+    () => createReportSchema(new Set(workerLabels.filter((label) => label.name.trim() === OTHER_WORKER_LABEL).map((label) => label.id))),
+    [workerLabels],
   );
   const form = useForm<ReportSchemaValues>({
     resolver: zodResolver(reportSchema),

@@ -25,6 +25,8 @@ import type { AppUser, DailyReport, MasterItem, Site } from "@/types/database";
 
 type ReportListRow = DailyReport & { site: Site | null; work_category?: MasterItem | null; creator_display_name?: string | null };
 const HIDDEN_REPORT_AUTHOR_IDS = new Set(["be79d784-de9b-433e-a74c-0648102e3dda"]);
+const REPORT_SORT_ORDER_KEY = "reports-sort-order";
+type ReportSortOrder = "asc" | "desc";
 
 function DateFilterField({
   id,
@@ -129,6 +131,9 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 export function ReportsPage() {
   const { user, appUser, isMaster } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [sortOrder, setSortOrder] = useState<ReportSortOrder>(() =>
+    window.sessionStorage.getItem(REPORT_SORT_ORDER_KEY) === "asc" ? "asc" : "desc",
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reports, setReports] = useState<ReportListRow[]>([]);
@@ -218,11 +223,12 @@ export function ReportsPage() {
       group.push(report);
       groups.set(key, group);
     });
-    return Array.from(groups.entries()).map(([date, items]) => ({
+    const grouped = Array.from(groups.entries()).map(([date, items]) => ({
       date,
       items,
     }));
-  }, [reports]);
+    return sortOrder === "asc" ? grouped.reverse() : grouped;
+  }, [reports, sortOrder]);
   const filterableAppUsers = useMemo(
     () => appUsers.filter((item) => !HIDDEN_REPORT_AUTHOR_IDS.has(item.user_id)),
     [appUsers],
@@ -402,6 +408,26 @@ export function ReportsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-muted-foreground">
+        <Label htmlFor="report-sort-order" className="text-xs">作業日の並び替え</Label>
+        <div className="relative">
+          <select
+            id="report-sort-order"
+            className="h-9 appearance-none rounded-xl border border-border/60 bg-white py-1 pl-3 pr-9 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            value={sortOrder}
+            onChange={(event) => {
+              const nextOrder = event.target.value === "asc" ? "asc" : "desc";
+              setSortOrder(nextOrder);
+              window.sessionStorage.setItem(REPORT_SORT_ORDER_KEY, nextOrder);
+            }}
+          >
+            <option value="desc">降順（新しい日付から）</option>
+            <option value="asc">昇順（古い日付から）</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 opacity-70" />
+        </div>
+      </div>
 
       {loading ? (
         <LoadingState message="日報一覧を読み込んでいます..." showProgress expectedDurationMs={3000} />

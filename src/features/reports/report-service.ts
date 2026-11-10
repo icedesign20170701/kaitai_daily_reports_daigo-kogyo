@@ -246,6 +246,7 @@ export async function saveReport(values: ReportFormValues, _userId: string, repo
     p_worker_ids: values.worker_ids,
     p_external_worker_entries: values.external_worker_entries,
     p_lease_entries: values.lease_entries,
+    p_lease_notes: values.lease_notes,
     p_disposal_entries: disposalEntries,
     p_transport_entries: values.transport_entries,
   });

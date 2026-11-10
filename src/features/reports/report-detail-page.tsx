@@ -358,6 +358,7 @@ export function ReportDetailPage() {
 
               <DetailSection title="諸経費（消耗品等）" value={report.miscellaneous_costs} />
               <ListSection title="リース関係" rows={leaseRows} />
+              {report.lease_notes ? <DetailSection title="その他リース関係" value={report.lease_notes} /> : null}
               <ListSection title="ゴミ処分" rows={disposalRows} />
               <ListSection title="車両・運搬" rows={transportRows} />
               <ListSection title="その他車両" rows={otherVehicleRows(report.other_vehicle_entries)} />

@@ -126,10 +126,12 @@ export async function exportReportsCsv(
         csvEscape(report.contract_type === "regular" ? "常用" : "請負"),
         csvEscape(report.miscellaneous_costs ?? ""),
         csvEscape(
-          report.lease_entries
-            .filter((entry) => entry.count > 0)
-            .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.label || "車両未設定"}:${entry.count}台`)
-            .join("\n"),
+          [
+            ...report.lease_entries
+              .filter((entry) => entry.count > 0)
+              .map((entry) => `${entry.item?.name ?? "未設定"} / ${entry.label || "車両未設定"}:${entry.count}台`),
+            ...(report.lease_notes ? [`その他リース関係: ${report.lease_notes}`] : []),
+          ].join("\n"),
         ),
         csvEscape(
           report.disposal_entries

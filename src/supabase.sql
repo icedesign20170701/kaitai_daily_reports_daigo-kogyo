@@ -326,6 +326,16 @@ as $$
   );
 $$;
 
+begin;
+
+alter table public.daily_reports
+  add column if not exists lease_notes text;
+
+drop function if exists public.save_daily_report(
+  uuid, uuid, text, uuid, date, text, integer, text, text, text,
+  jsonb, text, text, text, text, uuid[], jsonb, jsonb, jsonb, jsonb
+);
+
 create or replace function public.save_daily_report(
   p_report_id uuid,
   p_site_id uuid,
@@ -346,7 +356,8 @@ create or replace function public.save_daily_report(
   p_external_worker_entries jsonb,
   p_lease_entries jsonb,
   p_disposal_entries jsonb,
-  p_transport_entries jsonb
+  p_transport_entries jsonb,
+  p_lease_notes text default null
 )
 returns uuid
 language plpgsql
@@ -371,6 +382,7 @@ begin
       work_shift,
       contract_type,
       miscellaneous_costs,
+      lease_notes,
       other_vehicle_entries,
       work_description,
       other_workers_note,
@@ -388,6 +400,7 @@ begin
       p_work_shift,
       p_contract_type,
       p_miscellaneous_costs,
+      nullif(p_lease_notes, ''),
       coalesce(p_other_vehicle_entries, '[]'::jsonb),
       p_work_description,
       p_other_workers_note,
@@ -412,6 +425,8 @@ begin
       work_shift = p_work_shift,
       contract_type = p_contract_type,
       miscellaneous_costs = p_miscellaneous_costs,
+      -- Older clients omit this argument, while an empty string clears it.
+      lease_notes = case when p_lease_notes is null then lease_notes else nullif(p_lease_notes, '') end,
       other_vehicle_entries = coalesce(p_other_vehicle_entries, '[]'::jsonb),
       work_description = p_work_description,
       other_workers_note = p_other_workers_note,
@@ -521,6 +536,8 @@ begin
   return v_report_id;
 end;
 $$;
+
+commit;
 
 drop trigger if exists set_sites_updated_at on public.sites;
 create trigger set_sites_updated_at

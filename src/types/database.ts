@@ -34,6 +34,7 @@ export type DailyReport = BaseRow & {
   work_shift: "day" | "night";
   contract_type: "contract" | "regular";
   miscellaneous_costs: string | null;
+  lease_notes: string | null;
   other_vehicle_entries: OtherVehicleEntry[];
   work_description: string | null;
   other_workers_note: string | null;
@@ -137,6 +138,7 @@ export type ReportFormValues = {
   work_shift: "day" | "night";
   contract_type: "contract" | "regular";
   miscellaneous_costs: string;
+  lease_notes: string;
   lease_entries: ReportLeaseEntry[];
   disposal_entries: ReportDisposalEntry[];
   transport_entries: ReportTransportEntry[];

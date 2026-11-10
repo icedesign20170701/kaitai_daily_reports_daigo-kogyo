@@ -78,6 +78,7 @@ const reportSchema = z
     work_shift: z.enum(["day", "night"]),
     contract_type: z.enum(["contract", "regular"]),
     miscellaneous_costs: z.string().max(3000, "3000文字以内で入力してください"),
+    lease_notes: z.string().max(3000, "3000文字以内で入力してください"),
     lease_entries: z.array(
       z.object({
         lease_item_id: z.string().min(1),
@@ -847,6 +848,7 @@ export function ReportForm({
       work_shift: initialReport?.work_shift ?? "day",
       contract_type: initialReport?.contract_type ?? "contract",
       miscellaneous_costs: initialReport?.miscellaneous_costs ?? "",
+      lease_notes: initialReport?.lease_notes ?? "",
       lease_entries:
         initialReport?.lease_entries.map((entry) => ({
           lease_item_id: entry.lease_item_id ?? "",
@@ -1350,17 +1352,17 @@ export function ReportForm({
             <Textarea rows={7} placeholder="高速代金 : 台 円 などを入力" {...form.register("miscellaneous_costs")} />
           </FieldBlock>
 
-          {leaseItems.length > 0 ? (
           <FieldBlock title="リース関係">
-            <div className="grid gap-3 xl:grid-cols-2">
-              {leaseItems.map((item) => (
-                <LeaseItemRows
-                  key={item.id}
-                  item={item}
-                  errors={leaseErrors}
-                  rows={leaseEntries
-                    .map((entry, index) => ({ fieldIndex: index, entry }))
-                    .filter(({ entry }) => entry.lease_item_id === item.id)}
+            {leaseItems.length > 0 ? (
+              <div className="grid gap-3 xl:grid-cols-2">
+                {leaseItems.map((item) => (
+                  <LeaseItemRows
+                    key={item.id}
+                    item={item}
+                    errors={leaseErrors}
+                    rows={leaseEntries
+                      .map((entry, index) => ({ fieldIndex: index, entry }))
+                      .filter(({ entry }) => entry.lease_item_id === item.id)}
                     onAdd={() => leaseArray.append({ lease_item_id: item.id, label: "", count: 0 })}
                     onRemove={(index) => leaseArray.remove(index)}
                     onChangeLabel={(index, value) => form.setValue(`lease_entries.${index}.label`, value, { shouldDirty: true })}
@@ -1368,8 +1370,15 @@ export function ReportForm({
                   />
                 ))}
               </div>
-            </FieldBlock>
-          ) : null}
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="lease_notes">その他リース関係</Label>
+              <Textarea id="lease_notes" rows={5} {...form.register("lease_notes")} />
+              {form.formState.errors.lease_notes ? (
+                <p className="text-sm text-destructive">{form.formState.errors.lease_notes.message}</p>
+              ) : null}
+            </div>
+          </FieldBlock>
 
           {disposalItems.length > 0 ? (
             <FieldBlock title="ゴミ処分">

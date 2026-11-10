@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/auth-context";
 import { PhotoGalleryDialog, type GalleryPhoto } from "@/features/reports/photo-gallery-dialog";
+import { reportListDatePath } from "@/features/reports/report-service";
 import { compressImageFile } from "@/lib/image-compression";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, toDateInputValue } from "@/lib/utils";
@@ -1553,7 +1554,7 @@ export function ReportForm({
       </Card>
 
       <div className="pt-2">
-        <Link to="/reports" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
+        <Link to={initialReport ? reportListDatePath(initialReport.report_date) : "/reports"} className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
           一覧に戻る
         </Link>
       </div>

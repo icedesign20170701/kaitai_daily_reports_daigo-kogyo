@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/app/page-header";
+import type { AppLayoutContext } from "@/components/app/app-layout";
 import { PageShell } from "@/components/app/page-shell";
 import { LoadingState } from "@/components/app/loading-state";
 import { EmptyState, ErrorState } from "@/components/app/states";
@@ -12,7 +13,7 @@ import { useAuth } from "@/features/auth/auth-context";
 import { listMasterItems } from "@/features/masters/master-service";
 import { PhotoGalleryDialog, type GalleryPhoto } from "@/features/reports/photo-gallery-dialog";
 import { ReportForm } from "@/features/reports/report-form";
-import { deletePhoto, deleteReport, displayReportSiteName, getReportDetail, saveReport } from "@/features/reports/report-service";
+import { deletePhoto, deleteReport, displayReportSiteName, getReportDetail, reportListDatePath, saveReport } from "@/features/reports/report-service";
 import { listSites } from "@/features/sites/site-service";
 import { storageService } from "@/lib/storage-service";
 import { cn, formatDate, withSupabaseRecovery } from "@/lib/utils";
@@ -123,6 +124,7 @@ function formatEditedAt(value: string) {
 export function ReportDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const setReportListReturn = useOutletContext<AppLayoutContext>();
   const { user, appUser, isMaster } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -181,6 +183,13 @@ export function ReportDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!report || report.id !== id) return;
+
+    setReportListReturn({ reportId: report.id, to: reportListDatePath(report.report_date) });
+    return () => setReportListReturn(null);
+  }, [id, report, setReportListReturn]);
 
   const reload = async () => {
     if (!id) return;
@@ -415,7 +424,7 @@ export function ReportDetailPage() {
             </CardContent>
           </Card>
 
-          <Link to={`/reports?month=${report.report_date.slice(0, 7)}`} className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}>
+          <Link to={reportListDatePath(report.report_date)} className={cn(buttonVariants({ variant: "outline" }), "w-full md:w-auto")}>
             一覧へ戻る
           </Link>
         </div>

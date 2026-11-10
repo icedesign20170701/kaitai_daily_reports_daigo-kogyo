@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Download, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { endOfMonth, format, startOfMonth, subMonths, addMonths, parseISO } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -73,14 +73,159 @@ function DateFilterField({
   );
 }
 
-function MonthPicker({
+type ReportFiltersValues = {
+  from: string;
+  to: string;
+  siteId: string;
+  workCategoryId: string;
+  createdBy: string;
+};
+
+function ReportFilters({
+  filters,
+  filterSummary,
+  sites,
+  workCategories,
+  filterableAppUsers,
+  onChange,
+}: {
+  filters: ReportFiltersValues;
+  filterSummary: string;
+  sites: Site[];
+  workCategories: MasterItem[];
+  filterableAppUsers: AppUser[];
+  onChange: (changes: Partial<ReportFiltersValues>) => void;
+}) {
+  const [showFilters, setShowFilters] = useState(false);
+  const panelId = useId();
+
+  return (
+    <div className="space-y-4">
+      <button
+        type="button"
+        aria-expanded={showFilters}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between rounded-2xl border bg-background px-4 py-3 text-left transition hover:bg-accent/50"
+        onClick={() => setShowFilters((current) => !current)}
+      >
+        <div>
+          <p className="text-sm font-semibold">絞り込み</p>
+          <p className="text-xs text-muted-foreground">{filterSummary}</p>
+        </div>
+        <ChevronDown className={cn("h-4 w-4 transition-transform", showFilters && "rotate-180")} />
+      </button>
+      <div
+        id={panelId}
+        hidden={!showFilters}
+        className={cn(
+          "gap-4 rounded-2xl border bg-background p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.1fr_1.1fr_1.1fr]",
+          showFilters && "grid",
+        )}
+      >
+        <DateFilterField
+          id={`${panelId}-from`}
+          label="開始日"
+          value={filters.from}
+          onChange={(value) => onChange({ from: value })}
+        />
+        <DateFilterField
+          id={`${panelId}-to`}
+          label="終了日"
+          value={filters.to}
+          onChange={(value) => onChange({ to: value })}
+        />
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor={`${panelId}-siteId`}>現場</Label>
+          <div className="relative">
+            <select
+              className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+              id={`${panelId}-siteId`}
+              value={filters.siteId}
+              onChange={(event) => onChange({ siteId: event.target.value })}
+            >
+              <option value="all">すべての現場</option>
+              {sites.map((site) => (
+                <option key={site.id} value={site.id}>
+                  {site.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+          </div>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor={`${panelId}-workCategoryId`}>工事区分</Label>
+          <div className="relative">
+            <select
+              className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+              id={`${panelId}-workCategoryId`}
+              value={filters.workCategoryId}
+              onChange={(event) => onChange({ workCategoryId: event.target.value })}
+            >
+              <option value="all">すべての工事区分</option>
+              {workCategories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+          </div>
+        </div>
+        <div className="min-w-0 space-y-2">
+          <Label htmlFor={`${panelId}-createdBy`}>記入者</Label>
+          <div className="relative">
+            <select
+              className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
+              id={`${panelId}-createdBy`}
+              value={filters.createdBy}
+              onChange={(event) => onChange({ createdBy: event.target.value })}
+            >
+              <option value="all">全員</option>
+              {filterableAppUsers.map((item) => (
+                <option key={item.user_id} value={item.user_id}>
+                  {item.display_name || "未設定"}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MonthNavigation({
   value,
   onChange,
 }: {
   value: Date;
   onChange: (value: Date) => void;
 }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="icon" aria-label="前の月" onClick={() => onChange(subMonths(value, 1))}>
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      <Button variant="outline" size="icon" aria-label="次の月" onClick={() => onChange(addMonths(value, 1))}>
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+function MonthPicker({
+  value,
+  onChange,
+  scrollToTopOnSelect = false,
+}: {
+  value: Date;
+  onChange: (value: Date) => void;
+  scrollToTopOnSelect?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const skipFocusRestore = useRef(false);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -98,13 +243,23 @@ function MonthPicker({
           <p className="mt-1 text-xs text-muted-foreground md:text-[11px]">クリックして月変更</p>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-3">
+      <PopoverContent
+        align="start"
+        className="w-auto p-3"
+        onCloseAutoFocus={(event) => {
+          if (skipFocusRestore.current) {
+            event.preventDefault();
+            skipFocusRestore.current = false;
+          }
+        }}
+      >
         <Calendar
           mode="single"
           selected={value}
           defaultMonth={value}
           onSelect={(date) => {
             if (!date) return;
+            skipFocusRestore.current = scrollToTopOnSelect;
             onChange(startOfMonth(date));
             setOpen(false);
           }}
@@ -130,6 +285,7 @@ function ProgressBadge({ status }: { status: DailyReport["progress_status"] }) {
 
 export function ReportsPage() {
   const { user, appUser, isMaster } = useAuth();
+  const { hash, key: locationKey } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [sortOrder, setSortOrder] = useState<ReportSortOrder>(() =>
     window.sessionStorage.getItem(REPORT_SORT_ORDER_KEY) === "asc" ? "asc" : "desc",
@@ -153,14 +309,25 @@ export function ReportsPage() {
       return next;
     }, { replace: true });
   };
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
+  const changeMonthFromBottom = (date: Date) => {
+    setCurrentMonth(date);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const [filters, setFilters] = useState<ReportFiltersValues>({
     from: toDateInputValue(startOfMonth(currentMonth)),
     to: toDateInputValue(endOfMonth(currentMonth)),
     siteId: "all",
     workCategoryId: "all",
     createdBy: "all",
   });
+
+  useEffect(() => {
+    const updateBackToTop = () => setShowBackToTop(window.scrollY > 400);
+    updateBackToTop();
+    window.addEventListener("scroll", updateBackToTop, { passive: true });
+    return () => window.removeEventListener("scroll", updateBackToTop);
+  }, []);
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -207,6 +374,12 @@ export function ReportsPage() {
     void loadReports();
   }, [loadReports]);
 
+  useEffect(() => {
+    if (loading || error || !hash.startsWith("#report-date-")) return;
+
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+  }, [error, hash, loading, locationKey, reports]);
+
   const summary = useMemo(() => {
     const totalWorkers = reports.reduce((sum, report) => sum + report.worker_count, 0);
     return {
@@ -239,6 +412,14 @@ export function ReportsPage() {
   } / ${filters.workCategoryId === "all" ? "すべての工事区分" : workCategories.find((item) => item.id === filters.workCategoryId)?.name ?? "工事区分未選択"} / ${
     filters.createdBy === "all" ? "全員" : filterableAppUsers.find((item) => item.user_id === filters.createdBy)?.display_name ?? "未設定"
   }`;
+  const filterPanelProps = {
+    filters,
+    filterSummary,
+    sites,
+    workCategories,
+    filterableAppUsers,
+    onChange: (changes: Partial<ReportFiltersValues>) => setFilters((current) => ({ ...current, ...changes })),
+  };
   const greetingName = appUser?.display_name || user?.email || "ユーザー";
 
   const handleExportCsv = async () => {
@@ -274,14 +455,7 @@ export function ReportsPage() {
       <Card className="mb-4">
         <CardContent className="space-y-4 pt-5">
           <div className="grid gap-4 md:hidden">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <MonthNavigation value={currentMonth} onChange={setCurrentMonth} />
             <MonthPicker value={currentMonth} onChange={setCurrentMonth} />
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
@@ -296,14 +470,7 @@ export function ReportsPage() {
           </div>
 
           <div className="hidden gap-4 md:grid md:grid-cols-[auto_minmax(0,1fr)] lg:grid-cols-[auto_minmax(220px,0.8fr)_minmax(120px,auto)_minmax(120px,auto)]">
-            <div className="flex items-center gap-2 md:justify-center">
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <MonthNavigation value={currentMonth} onChange={setCurrentMonth} />
             <MonthPicker value={currentMonth} onChange={setCurrentMonth} />
             <div className="grid grid-cols-2 gap-4 md:col-span-2 lg:col-span-1 lg:contents">
               <div className="rounded-2xl bg-secondary px-4 py-3 text-center">
@@ -317,95 +484,7 @@ export function ReportsPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="flex w-full items-center justify-between rounded-2xl border bg-background px-4 py-3 text-left transition hover:bg-accent/50"
-            onClick={() => setShowFilters((current) => !current)}
-          >
-            <div>
-              <p className="text-sm font-semibold">絞り込み</p>
-              <p className="text-xs text-muted-foreground">{filterSummary}</p>
-            </div>
-            <ChevronDown className={cn("h-4 w-4 transition-transform", showFilters && "rotate-180")} />
-          </button>
-
-          <div
-            className={cn(
-              "grid overflow-hidden transition-all duration-300 ease-out",
-              showFilters ? "mt-0 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-            )}
-          >
-            <div className="min-h-0">
-            <div className="grid gap-4 rounded-2xl border bg-background p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1.1fr_1.1fr_1.1fr]">
-              <DateFilterField
-                id="filter-from"
-                label="開始日"
-                value={filters.from}
-                onChange={(value) => setFilters((current) => ({ ...current, from: value }))}
-              />
-              <DateFilterField
-                id="filter-to"
-                label="終了日"
-                value={filters.to}
-                onChange={(value) => setFilters((current) => ({ ...current, to: value }))}
-              />
-              <div className="min-w-0 space-y-2">
-                <Label>現場</Label>
-                <div className="relative">
-                  <select
-                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
-                    value={filters.siteId}
-                    onChange={(event) => setFilters((current) => ({ ...current, siteId: event.target.value }))}
-                  >
-                    <option value="all">すべての現場</option>
-                    {sites.map((site) => (
-                      <option key={site.id} value={site.id}>
-                        {site.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
-                </div>
-              </div>
-              <div className="min-w-0 space-y-2">
-                <Label>工事区分</Label>
-                <div className="relative">
-                  <select
-                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
-                    value={filters.workCategoryId}
-                    onChange={(event) => setFilters((current) => ({ ...current, workCategoryId: event.target.value }))}
-                  >
-                    <option value="all">すべての工事区分</option>
-                    {workCategories.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
-                </div>
-              </div>
-              <div className="min-w-0 space-y-2">
-                <Label>記入者</Label>
-                <div className="relative">
-                  <select
-                    className="flex h-11 w-full appearance-none rounded-xl border bg-card px-3 py-2 pr-10 text-left text-base shadow-sm outline-none md:text-sm"
-                    value={filters.createdBy}
-                    onChange={(event) => setFilters((current) => ({ ...current, createdBy: event.target.value }))}
-                  >
-                    <option value="all">全員</option>
-                    {filterableAppUsers.map((item) => (
-                      <option key={item.user_id} value={item.user_id}>
-                        {item.display_name || "未設定"}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground opacity-70" />
-                </div>
-              </div>
-              </div>
-            </div>
-          </div>
+          <ReportFilters {...filterPanelProps} />
         </CardContent>
       </Card>
 
@@ -438,7 +517,7 @@ export function ReportsPage() {
       ) : (
         <div className="space-y-5">
           {groupedReports.map((group) => (
-            <section key={group.date} className="space-y-3">
+            <section key={group.date} id={`report-date-${group.date}`} className="scroll-mt-4 space-y-3 md:scroll-mt-28">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-bold">{formatDate(group.date)}</h2>
@@ -523,6 +602,35 @@ export function ReportsPage() {
           ))}
         </div>
       )}
+      <Card className="mt-4">
+        <CardContent className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
+          <MonthNavigation value={currentMonth} onChange={changeMonthFromBottom} />
+          <MonthPicker value={currentMonth} onChange={changeMonthFromBottom} scrollToTopOnSelect />
+        </CardContent>
+      </Card>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={cn(
+          "fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-20 rounded-full bg-white shadow-soft md:bottom-6 md:right-6",
+          "transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
+          showBackToTop
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-[calc(100%+5rem+env(safe-area-inset-bottom))] opacity-0",
+        )}
+        disabled={!showBackToTop}
+        aria-hidden={!showBackToTop}
+        aria-label="ページの先頭へ戻る"
+        title="ページの先頭へ戻る"
+        onClick={() => window.scrollTo({
+          top: 0,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        })}
+      >
+        <ArrowUp className="h-4 w-4" />
+      </Button>
     </PageShell>
   );
 }

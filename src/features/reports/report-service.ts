@@ -51,6 +51,10 @@ function displayReportSiteName(report: { site?: Site | null; site_name?: string 
   return report.site_name?.trim() || report.site?.name || "";
 }
 
+export function reportListDatePath(reportDate: string) {
+  return `/reports?month=${reportDate.slice(0, 7)}#report-date-${reportDate}`;
+}
+
 export async function listReports(filters: ReportListFilters = {}) {
   let query = supabase
     .from("daily_reports")

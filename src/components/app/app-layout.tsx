@@ -17,11 +17,18 @@ const navItems = [
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "kaitai-sidebar-collapsed";
 
+type ReportListReturn = { reportId: string; to: string };
+export type AppLayoutContext = (target: ReportListReturn | null) => void;
+
 export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSubcontractor } = useAuth();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true");
+  const [reportListReturn, setReportListReturn] = useState<ReportListReturn | null>(null);
+  const reportsNavTo = reportListReturn && location.pathname === `/reports/${reportListReturn.reportId}`
+    ? reportListReturn.to
+    : "/reports";
   const isReportEditingScreen = location.pathname.startsWith("/reports/new") || /^\/reports\/[^/]+$/.test(location.pathname);
   const visibleNavItems = useMemo(
     () => (isSubcontractor ? navItems.filter((item) => item.to === "/reports") : navItems),
@@ -111,7 +118,7 @@ export function AppLayout() {
             {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={item.to === "/reports" ? reportsNavTo : item.to}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center rounded-2xl py-3 text-sm font-semibold text-slate-400 transition hover:bg-white/8 hover:text-white",
@@ -168,7 +175,7 @@ export function AppLayout() {
         ) : null}
 
         <main className="min-w-0 flex-1">
-          <Outlet />
+          <Outlet context={setReportListReturn} />
         </main>
 
         {!isReportEditingScreen ? (
@@ -177,7 +184,7 @@ export function AppLayout() {
               {visibleNavItems.map((item) => (
                 <NavLink
                   key={item.to}
-                  to={item.to}
+                  to={item.to === "/reports" ? reportsNavTo : item.to}
                   className={({ isActive }) =>
                     cn(
                       "flex flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-xs font-semibold text-muted-foreground transition",
